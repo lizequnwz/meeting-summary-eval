@@ -1,0 +1,78 @@
+"""Run installed DeepEval metrics against an offline schema-aware judge."""
+
+import asyncio
+
+import pytest
+from deepeval.models import DeepEvalBaseLLM
+from deepeval.test_case import LLMTestCase
+
+from meeting_eval.metrics import create_metrics
+
+
+class OfflineJudge(DeepEvalBaseLLM):
+    def __init__(self):
+        self.prompts = []
+
+    def load_model(self):
+        return self
+
+    def get_model_name(self):
+        return "offline-schema-judge"
+
+    def generate(self, prompt, schema=None):
+        self.prompts.append(prompt)
+        data = {
+            "Truths": {"truths": ["A speaker expects rates to fall, conditional on inflation."]},
+            "Claims": {"claims": ["An attributed forecast", "A contradicted claim", "An unsupported recommendation"]},
+            "Verdicts": {"verdicts": [
+                {"verdict": "yes", "reason": None},
+                {"verdict": "no", "reason": "The transcript contradicts the number."},
+                {"verdict": "borderline", "reason": "The recommendation is not supported."},
+            ]},
+            "FaithfulnessScoreReason": {"reason": "One supported claim, one contradiction, and one unsupported claim."},
+            "ReasonScore": {"score": 8, "reason": "One minor topic omitted."},
+        }
+        return schema.model_validate(data[schema.__name__])
+
+    async def a_generate(self, prompt, schema=None):
+        return self.generate(prompt, schema)
+
+
+def test_installed_faithfulness_penalizes_unsupported_and_contradicted_claims():
+    judge = OfflineJudge()
+    metric = create_metrics(judge)["faithfulness"]
+    case = LLMTestCase(
+        input="Evaluate the summary using the meeting as source.",
+        actual_output="A summary with three claims.",
+        retrieval_context=["A speaker expects rates to fall, conditional on inflation."],
+    )
+    score = asyncio.run(metric.a_measure(case, _show_indicator=False))
+    assert score == pytest.approx(1 / 3)
+    assert metric.reason == "One supported claim, one contradiction, and one unsupported claim."
+    assert metric.threshold is None
+    assert any("attributed views" in prompt for prompt in judge.prompts)
+    assert any("recommendations" in prompt for prompt in judge.prompts)
+
+
+@pytest.mark.parametrize("name", ["coverage", "clarity"])
+def test_installed_geval_uses_rubric_score_without_generated_steps_or_logprobs(name):
+    judge = OfflineJudge()
+    metric = create_metrics(judge, (name,))[name]
+    case = LLMTestCase(
+        input="Assess important information coverage.",
+        actual_output="The summary.",
+        retrieval_context=["The original meeting transcript."],
+    )
+    score = asyncio.run(metric.a_measure(case, _show_indicator=False))
+    assert score == pytest.approx(0.8)
+    assert len(judge.prompts) == 1
+    if name == "coverage":
+        assert "The original meeting transcript." in judge.prompts[0]
+    assert metric.threshold is None
+
+
+def test_unknown_metric_is_rejected_before_any_judge_calls():
+    judge = OfflineJudge()
+    with pytest.raises(ValueError, match="Unknown metrics"):
+        create_metrics(judge, ("faithfulness", "does-not-exist"))
+    assert judge.prompts == []

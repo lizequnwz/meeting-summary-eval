@@ -1,0 +1,209 @@
+import asyncio
+from pathlib import Path
+
+import pytest
+
+import meeting_eval.evaluator as engine
+from meeting_eval import MeetingSummaryEvaluator
+from meeting_eval.models import Diagnostics, Evidence, Finding
+
+
+class FakeJudge:
+    async def aclose(self):
+        pass
+
+    async def structured(self, prompt, schema):
+        return Diagnostics(qa_present=False, findings=[])
+
+
+class FakeMetric:
+    def __init__(self, name, fail=False):
+        self.name, self.fail = name, fail
+        self.score, self.reason = 0.9, "Supported test assessment"
+        self.claims, self.verdicts = ["A source-supported claim"], []
+
+    async def a_measure(self, case):
+        if self.fail:
+            raise TimeoutError("Sensitive source text should never appear in the error")
+        await asyncio.sleep(0)
+
+
+@pytest.fixture
+def evaluator(monkeypatch):
+    monkeypatch.setattr(engine, "LangChainJudge", lambda *args, **kwargs: FakeJudge())
+    monkeypatch.setattr(engine, "create_metrics", lambda judge, names: {n: FakeMetric(n) for n in names})
+    return MeetingSummaryEvaluator(env_file=None)
+
+
+def test_sync_reuse_and_input_normalization(evaluator):
+    first = evaluator.evaluate("\ufeffSpeaker: a claim.\r\n", "A claim.", "one")
+    second = evaluator.evaluate("Speaker: another claim.", "Another claim.", "two")
+    assert first.execution_status == second.execution_status == "completed"
+    assert first.metrics["faithfulness"].score == 0.9
+    assert not first.review_required
+    assert first.metadata["diagnostics_status"] == "completed"
+    assert len(first.metadata["transcript_sha256"]) == 64
+
+
+@pytest.mark.parametrize("transcript,summary", [("", "x"), ("x", " "), (None, "x")])
+def test_invalid_inputs_do_not_initialize_judge(monkeypatch, transcript, summary):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Invalid inputs must not make a judge request")
+    monkeypatch.setattr(engine, "LangChainJudge", unexpected)
+    result = MeetingSummaryEvaluator(env_file=None).evaluate(transcript, summary)
+    assert result.execution_status == "invalid"
+    assert result.review_required
+
+
+async def test_sync_wrapper_explains_active_loop(evaluator):
+    with pytest.raises(RuntimeError, match="await evaluator"):
+        evaluator.evaluate("source", "summary")
+
+
+async def test_failed_metric_keeps_successes_and_hides_source(evaluator, monkeypatch):
+    monkeypatch.setattr(engine, "create_metrics", lambda judge, names: {
+        n: FakeMetric(n, fail=n == "coverage") for n in names
+    })
+    result = await evaluator.aevaluate("source", "summary")
+    assert result.execution_status == "partial"
+    assert result.metrics["faithfulness"].score == 0.9
+    assert result.metrics["coverage"].score is None
+    assert result.metrics["coverage"].status == "error"
+    assert "Sensitive source" not in str(result.errors)
+    assert result.review_required
+
+
+async def test_diagnostics_failure_never_means_clean_review(evaluator):
+    class Broken(FakeJudge):
+        async def structured(self, *args):
+            raise ValueError("Malformed response")
+    evaluator._judge = Broken()
+    result = await evaluator.aevaluate("source", "summary")
+    assert result.execution_status == "partial"
+    assert result.metadata["diagnostics_status"] == "error"
+    assert result.review_required
+
+
+async def test_high_scores_do_not_hide_material_findings(evaluator):
+    class Critical(FakeJudge):
+        async def structured(self, *args):
+            return Diagnostics(qa_present=False, findings=[Finding(kind="certainty_inflation", severity="high",
+                description="A tentative source became a certainty.", evidence=[
+                    Evidence(source="transcript", quote="It may rise.", verified=True, line_start=999),
+                    Evidence(source="summary", quote="It will rise.")])])
+    evaluator._judge = Critical()
+    result = await evaluator.aevaluate("Speaker:\nIt may rise.", "It will rise.")
+    assert result.execution_status == "completed"
+    assert result.review_required
+    assert result.findings[0].evidence[0].line_start == 2
+    assert all(e.verified for e in result.findings[0].evidence)
+
+
+async def test_no_claims_is_unscorable(evaluator, monkeypatch):
+    def metrics(judge, names):
+        metric = FakeMetric("faithfulness")
+        metric.claims = []
+        return {"faithfulness": metric}
+    monkeypatch.setattr(engine, "create_metrics", metrics)
+    evaluator.metric_names = ("faithfulness",)
+    result = await evaluator.aevaluate("source", "The meeting ended.")
+    assert result.metrics["faithfulness"].status == "not_applicable"
+    assert result.metrics["faithfulness"].score is None
+    assert result.review_required
+
+
+async def test_metric_negative_verdict_requires_review_even_if_diagnostics_clean(evaluator, monkeypatch):
+    def metrics(judge, names):
+        metric = FakeMetric("faithfulness")
+        metric.verdicts = [{"verdict": "borderline", "reason": "Support unclear"}]
+        return {"faithfulness": metric}
+    monkeypatch.setattr(engine, "create_metrics", metrics)
+    result = await evaluator.aevaluate("source", "summary")
+    assert result.review_required
+    assert result.findings == []
+    assert any("Faithfulness" in reason for reason in result.review_reasons)
+
+
+async def test_batch_pairing_stable_order_and_reports(evaluator, tmp_path):
+    transcripts, summaries = tmp_path / "transcripts", tmp_path / "summaries"
+    transcripts.mkdir()
+    summaries.mkdir()
+    for meeting in ("003", "001", "002"):
+        (transcripts / f"{meeting}.txt").write_text("source", encoding="utf8")
+        (summaries / f"{meeting}.md").write_text("summary", encoding="utf8")
+    (summaries / "orphan.txt").write_text("unmatched", encoding="utf8")
+    (transcripts / "002.md").write_text("duplicate", encoding="utf8")
+    batch = await evaluator.aevaluate_batch(transcripts, summaries, tmp_path / "results")
+    assert [r.meeting_id for r in batch.results] == ["001", "002", "003", "orphan"]
+    assert [r.execution_status for r in batch.results] == ["completed", "invalid", "completed", "invalid"]
+    assert {p.name for p in Path(batch.output_dir).iterdir()} >= {"results.json", "scores.csv", "report.html"}
+
+
+async def test_batch_meeting_concurrency_is_bounded(evaluator, tmp_path, monkeypatch):
+    active = peak = 0
+    original = evaluator.aevaluate
+    async def measured(*args):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        result = await original(*args)
+        active -= 1
+        return result
+    monkeypatch.setattr(evaluator, "aevaluate", measured)
+    evaluator.max_concurrency = 2
+    for directory in ("t", "s"):
+        (tmp_path / directory).mkdir()
+        for i in range(7):
+            (tmp_path / directory / f"{i}.txt").write_text("source", encoding="utf8")
+    batch = await evaluator.aevaluate_batch(tmp_path / "t", tmp_path / "s")
+    assert len(batch.results) == 7
+    assert peak == 2
+
+
+async def test_global_configuration_failure_stops_queued_meetings(evaluator, tmp_path, monkeypatch):
+    count = 0
+    class BadMetric(FakeMetric):
+        async def a_measure(self, case):
+            nonlocal count
+            count += 1
+            raise engine.JudgeConfigurationError("unsupported model")
+    monkeypatch.setattr(engine, "create_metrics", lambda judge, names: {n: BadMetric(n) for n in names})
+    evaluator.max_concurrency = 1
+    for directory in ("t", "s"):
+        (tmp_path / directory).mkdir()
+        for i in range(3):
+            (tmp_path / directory / f"{i}.txt").write_text("source", encoding="utf8")
+    batch = await evaluator.aevaluate_batch(tmp_path / "t", tmp_path / "s")
+    assert count == 1
+    assert all(r.execution_status == "error" for r in batch.results)
+    assert all(r.review_required for r in batch.results)
+
+
+def test_validation():
+    for kwargs in ({"max_concurrency": 0}, {"metrics": []}, {"metrics": ["unknown"]}, {"max_retries": -1}):
+        with pytest.raises(ValueError):
+            MeetingSummaryEvaluator(env_file=None, **kwargs)
+
+
+async def test_unexpected_pair_failure_does_not_discard_batch(evaluator, tmp_path, monkeypatch):
+    original = evaluator.aevaluate
+    async def flaky(transcript, summary, meeting_id):
+        if meeting_id == "bad":
+            raise RuntimeError("unexpected bug")
+        return await original(transcript, summary, meeting_id)
+    monkeypatch.setattr(evaluator, "aevaluate", flaky)
+    for directory in ("t", "s"):
+        (tmp_path / directory).mkdir()
+        for meeting in ("bad", "good"):
+            (tmp_path / directory / f"{meeting}.txt").write_text("source", encoding="utf8")
+    batch = await evaluator.aevaluate_batch(tmp_path / "t", tmp_path / "s")
+    assert [r.execution_status for r in batch.results] == ["error", "completed"]
+
+
+async def test_async_methods_reject_closed_evaluator(evaluator, tmp_path):
+    await evaluator.aclose()
+    with pytest.raises(RuntimeError, match="closed"):
+        await evaluator.aevaluate("source", "summary")
+    with pytest.raises(RuntimeError, match="closed"):
+        await evaluator.aevaluate_batch(tmp_path, tmp_path)

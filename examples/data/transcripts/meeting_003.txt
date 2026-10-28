@@ -1,0 +1,12 @@
+FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
+
+00:00 Drew, moderator: This invented meeting concerns a credit-market scenario. All numbers, views, and product names used in this software fixture are fictional.
+00:40 Avery, market presenter: Investment-grade credit spreads widened by 15 basis points during the scenario's week. Wider spreads indicate that the market is demanding more compensation for credit risk.
+01:30 Avery: This is not a statement that all bond prices rose. Prices also depend on underlying interest rates and other factors.
+02:15 Quinn, fictional Fidelity presenter: Our illustrative outlook remains cautious because company fundamentals differ. We cannot guarantee positive returns and are not recommending that every client increase credit exposure.
+03:10 Quinn: The 15-basis-point move refers to the week, not the year, and is not a 15-percent return.
+04:00 Jamie, sales lead: The explicit advisor talking point is to distinguish spread income from total return. Ask about tolerance for credit losses and issuer concentration.
+05:00 Jamie: No new product or fund was presented. In particular, there is no product called Guaranteed Credit Plus in this fictional scenario.
+06:00 Drew: One question before we close.
+06:15 Devon, participant: Can we say wider spreads guarantee better client outcomes?
+06:30 Quinn: No. Wider spreads may offer more compensation for risk, but losses remain possible. Preserve that qualification in any summary.

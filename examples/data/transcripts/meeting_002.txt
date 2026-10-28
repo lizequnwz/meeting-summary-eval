@@ -1,0 +1,11 @@
+FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
+
+00:00 Lee, moderator: This invented scenario is about equity-market concentration and near-term liquidity. All figures are fictional.
+00:30 Priya, market presenter: The fictional broad equity index rose 1 percent this week. Most of that gain came from three large companies, while the typical constituent was approximately flat.
+01:20 Priya: The concentration point is the main development today. An index-level gain does not establish broad participation.
+02:05 Morgan, fictional Fidelity presenter: Our illustrative view is that concentration deserves attention when advisors describe diversification. We are not predicting that these companies will fall next week.
+03:00 Morgan: Separate a discussion of portfolio concentration from a short-term market-timing call. The distinction matters more than the headline index move.
+04:00 Taylor, sales lead: The explicit sales follow-up is to ask advisors whether a client's holdings have become concentrated in a small group of issuers. Do not assume that a broad index label means a client's overall portfolio is diversified.
+05:00 Taylor: Also ask about upcoming cash needs. In this scenario, a client with a tuition payment due in two months has a different liquidity constraint from a client investing for twenty years.
+06:00 Morgan: We have not discussed any specific fund, product opportunity, or return target. Do not add those to the meeting notes.
+07:00 Lee: The key message is concentration and liquidity discovery, not a forecast about next week's equity return. There is no Q&A segment in this fictional meeting.

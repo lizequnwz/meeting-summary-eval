@@ -1,0 +1,15 @@
+FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
+
+00:00 Maya, moderator: This fictional meeting covers inflation, bond-market volatility, and the sales team's follow-up questions. All figures and views are invented for software testing.
+00:35 Alex, market presenter: In our fictional scenario, the latest annual inflation reading is 3.2 percent, down from 3.4 percent in the prior reading. One observation does not establish a durable trend.
+01:20 Alex: Short-term yields declined by 10 basis points during the scenario's week. Longer-term yields were roughly unchanged. We should distinguish those maturities when discussing the move.
+02:10 Jordan, fictional Fidelity presenter: Our illustrative view is that inflation is moderating unevenly. We are not forecasting a specific date for a rate cut. Policy will depend on incoming data.
+03:05 Jordan: The practical portfolio discussion is about balancing income opportunities with duration risk. We are not recommending that every client lengthen duration.
+04:00 Sam, sales lead: For advisor conversations, ask about the client's investment horizon and tolerance for interest-rate volatility. The meeting's explicit talking point is that a higher yield does not eliminate price risk.
+05:10 Sam: We discussed no specific fund, product launch, or performance promise today.
+06:00 Maya: We have time for questions.
+06:15 Casey, participant: Does the lower inflation reading mean we should tell advisors a rate cut is certain next month?
+06:35 Jordan: No. One reading is insufficient, and there is no rate-cut date forecast in our discussion. Keep the uncertainty visible.
+07:20 Robin, participant: Should the talking point differ for clients who need cash soon?
+07:35 Sam: Yes. Ask about near-term liquidity needs before discussing exposure to interest-rate volatility. That is a discovery question, not a recommendation for a named product.
+08:10 Maya: Our main takeaways are uneven disinflation, different moves across maturities, and matching the conversation to horizon and liquidity needs.
