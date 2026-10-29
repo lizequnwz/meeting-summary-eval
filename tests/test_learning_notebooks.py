@@ -1,4 +1,6 @@
 import ast
+import builtins
+import importlib.metadata
 import importlib.util
 import json
 from pathlib import Path
@@ -20,6 +22,37 @@ def test_tutorial_sources_are_clean_executable_notebooks_with_explicit_offline_m
                 assert cell.get("outputs", []) == []
                 assert cell.get("execution_count") is None
                 compile("".join(cell["source"]), str(path), "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+
+
+@pytest.mark.parametrize("installed_version", [None, "3.7.0", "4.3.2"])
+def test_all_notebooks_check_the_active_kernel_before_importing_dependencies(monkeypatch, capsys, installed_version):
+    def deepeval_version(name):
+        assert name == "deepeval"
+        if installed_version is None:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return installed_version
+
+    original_import = builtins.__import__
+
+    def stdlib_only(name, *args, **kwargs):
+        if name.split(".")[0] in {"meeting_eval", "deepeval"}:
+            pytest.fail("Environment checks must run before importing evaluator dependencies")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.metadata, "version", deepeval_version)
+    monkeypatch.setattr(builtins, "__import__", stdlib_only)
+    monkeypatch.chdir(ROOT / "notebooks")
+    for path in sorted((ROOT / "notebooks").glob("*.ipynb")):
+        notebook = json.loads(path.read_text())
+        source = next("".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code")
+        if installed_version == "4.3.2":
+            exec(compile(source, str(path), "exec"), {})
+        else:
+            with pytest.raises(RuntimeError, match="%pip install --upgrade.*restart the kernel"):
+                exec(compile(source, str(path), "exec"), {})
+        output = capsys.readouterr().out
+        assert "Python:" in output
+        assert f"DeepEval: {installed_version or 'not installed'} | Required: 4.3.2" in output
 
 
 def test_runner_rejects_unmarked_lessons(tmp_path, monkeypatch):

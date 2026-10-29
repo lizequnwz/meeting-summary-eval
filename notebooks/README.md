@@ -8,6 +8,18 @@ Read the [learning guide](../docs/learning-guide.md), then follow this path:
 4. [02 — Batch evaluation](02_batch_evaluation.ipynb): recurring issues and reports across meetings.
 5. [04 — Prompt review and experiments](04_prompt_review_and_experiments.ipynb): offline judge-prompt review and supplied-summary comparisons, with optional live evaluation.
 
+Install and launch interactive notebooks from the repository root:
+
+```bash
+.venv/bin/python -m pip install --upgrade -e '.[dev,notebooks]'
+.venv/bin/python -m pip check
+.venv/bin/jupyter lab notebooks
+```
+
+Select the project's Python environment as the kernel. If `SingleTurnParams` cannot be
+imported, use the [kernel checks and repair steps](../docs/learning-guide.md#fix-a-notebook-import-error),
+then restart the kernel before rerunning cells.
+
 Only 01 and 02 make model calls by default. Lessons 00, 03, and 04 run offline with:
 
 ```bash

@@ -22,7 +22,8 @@ session. These are suggested study blocks, not measured completion times.
 Install and start Jupyter from the repository root:
 
 ```bash
-.venv/bin/python -m pip install -e '.[dev,notebooks]'
+.venv/bin/python -m pip install --upgrade -e '.[dev,notebooks]'
+.venv/bin/python -m pip check
 .venv/bin/jupyter lab notebooks
 ```
 
@@ -30,12 +31,38 @@ Use the project's Python environment as your kernel. If Jupyter offers the wrong
 register it, then choose **Meeting Summary Eval**:
 
 ```bash
-.venv/bin/python -m ipykernel install --user \
+.venv/bin/python -m ipykernel install --sys-prefix \
   --name meeting-summary-eval --display-name "Meeting Summary Eval"
 ```
 
-Check
-`sys.executable` in a notebook if an import fails. Do not paste an API key into a cell.
+Do not paste an API key into a cell.
+
+### Fix a notebook import error
+
+If `SingleTurnParams` cannot be imported, run this cell **before importing `meeting_eval`
+or DeepEval** to inspect the active kernel:
+
+```python
+import sys
+from importlib.metadata import version
+
+print("Python:", sys.executable)
+print("DeepEval:", version("deepeval"))
+```
+
+This project requires DeepEval **4.3.2**, which exports `SingleTurnParams`. The Python
+path should identify the environment where you installed the project. To install into
+the active kernel, replace the absolute repository path below and run:
+
+```ipython
+%pip install --upgrade -e "/absolute/path/to/meeting-summary-eval[dev,notebooks]"
+```
+
+If the notebook's working directory is the repository root, use
+`%pip install --upgrade -e ".[dev,notebooks]"` instead. Restart that same kernel after
+installation and run the notebook from the first cell. Alternatively, select the registered
+**Meeting Summary Eval** kernel. Restart even when the installed version is correct,
+since an existing kernel can retain imported code.
 
 To execute just the offline lessons and save readable HTML previews:
 

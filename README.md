@@ -18,10 +18,16 @@ Python 3.11 or newer is required:
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -e '.[dev,notebooks]'
+.venv/bin/python -m pip install --upgrade -e '.[dev,notebooks]'
+.venv/bin/python -m pip check
 ```
 
-Use `pip install -e .` for the API and CLI without notebook dependencies. Provide `OPENAI_API_KEY` through your environment or a local `.env`. Optional `OPENAI_MODEL` and `OPENAI_BASE_URL` select the model and endpoint. Process settings take precedence over `.env`; an explicit constructor model takes precedence over `OPENAI_MODEL`. The default is `gpt-6-luna`; your endpoint must provide that model and strict structured-output support. Credentials and source text should never be committed.
+The project pins DeepEval **4.3.2** and `langchain-openai` **1.7.3**. Use the installed
+environment as your notebook kernel. If importing `SingleTurnParams` fails, follow the
+[notebook import troubleshooting steps](docs/learning-guide.md#fix-a-notebook-import-error)
+to check and update that kernel's environment, then restart it.
+
+Use `.venv/bin/python -m pip install --upgrade -e .` for the API and CLI without notebook dependencies. Provide `OPENAI_API_KEY` through your environment or a local `.env`. Optional `OPENAI_MODEL` and `OPENAI_BASE_URL` select the model and endpoint. Process settings take precedence over `.env`; an explicit constructor model takes precedence over `OPENAI_MODEL`. The default is `gpt-6-luna`; your endpoint must provide that model and strict structured-output support. Credentials and source text should never be committed.
 
 ## Evaluate a meeting
 

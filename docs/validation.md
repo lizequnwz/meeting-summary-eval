@@ -7,8 +7,14 @@ separately supplied context, and labeled source-grounded outreach suggestions. S
 are supplied as inputs. Compare runs only when their recorded evaluation conditions match;
 earlier methodology scores are not a comparison baseline for methodology 3.
 
-On October 29, 2026, **118 offline tests passed** on Python 3.13. The calibration
-manifest validated all **20 fictional cases**, with human reviews still pending.
+On October 29, 2026, a fresh Python 3.13 environment installed the project with its
+development and notebook extras and current compatible dependencies. **121 offline tests
+passed**, including early notebook checks for missing or outdated DeepEval installations.
+`pip check` found no broken requirements, and importing `SingleTurnParams` succeeded.
+The tested versions included DeepEval **4.3.2**, `langchain-openai` **1.7.3**,
+`langchain-core` **1.7.1**, `langsmith` **0.14.15**, OpenAI **3.41.0**, and
+Pydantic **2.14.2**. The calibration manifest validated all **20 fictional cases**,
+with human reviews still pending.
 All three offline learning notebooks executed successfully with outgoing connections
 disabled inside their kernels. The summary-comparison notebook used supplied summaries;
 no live model calls were made.
