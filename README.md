@@ -4,6 +4,14 @@ Evaluate Capital Markets meeting summaries for Fidelity Institutional sales prof
 
 The packaged [producer template v4.1](src/meeting_eval/prompts/summary-template-v4.1.md) defines the six-section contract. The evaluator uses methodology **2**. These replace the original four-section, explicit-discussion-only policy; old scores are not a comparable baseline.
 
+**New to evaluation?** Start with the [learning guide](docs/learning-guide.md) and
+[notebook learning path](notebooks/README.md). The foundations, DeepEval lab, and prompt
+workbench run offline. They explain the methodology, show where to edit prompts, and
+demonstrate why DeepEval does **not** require a question list for every metric.
+
+Review the current prompts without model calls with `meeting-eval-prompts --show producer`,
+or export a review bundle with `meeting-eval-prompts --output results/prompt-review-001`.
+
 ## Install
 
 Python 3.11 or newer is required:
@@ -79,7 +87,7 @@ Enable optional checks with `metrics=("faithfulness", "coverage", "structure", "
 
 ## Prompt experiments and calibration
 
-The [single-meeting notebook](notebooks/01_single_meeting.ipynb) teaches individual metrics and the full evaluator; the [batch notebook](notebooks/02_batch_evaluation.ipynb) compares scores, findings, and exports. Both have **no saved outputs** and make billable requests when run. The single-meeting teaching path intentionally repeats metric calls. Start Jupyter with `.venv/bin/jupyter lab notebooks`.
+The [single-meeting notebook](notebooks/01_single_meeting.ipynb) runs the complete evaluator; the [batch notebook](notebooks/02_batch_evaluation.ipynb) compares scores, findings, and exports. Both have **no saved outputs** and make billable requests when run. Optional individual metric calls in the single-meeting notebook are off by default; the new offline metric lab teaches those stages without duplicate spending. Start Jupyter with `.venv/bin/jupyter lab notebooks`.
 
 The three bundled meetings are fictional: a faithful summary, important omissions, and material distortions. A separate [calibration manifest](calibration/fixtures.json) adds boundary cases for paraphrase, negation, units, attribution, generated outreach, context, unanswered Q&A, injection, and corrections. Expectations are draft test designs, **not human calibration labels**.
 

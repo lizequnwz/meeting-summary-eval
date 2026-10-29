@@ -1,0 +1,91 @@
+"""Inspect and export the effective producer and judge prompts without model calls."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
+from .diagnostics import diagnostic_prompt
+from .judge import JUDGE_SYSTEM_INSTRUCTION
+from .metrics import (
+    CLARITY_RUBRIC, CLARITY_STEPS, COVERAGE_RUBRIC, COVERAGE_STEPS,
+    MeetingFaithfulnessTemplate,
+)
+from .policy import METHODOLOGY_VERSION, POLICY, PRODUCER_PROMPT, TEMPLATE_VERSION
+from .provenance import evaluator_fingerprint
+
+
+def _rubric_text(steps, rubric) -> str:
+    instructions = "\n\n".join(f"{i}. {step}" for i, step in enumerate(steps, 1))
+    anchors = "\n".join(f"- {item.score_range[0]}–{item.score_range[1]}: {item.expected_outcome}" for item in rubric)
+    return instructions + "\n\nScoring rubric before 0–1 normalization:\n\n" + anchors
+
+
+def review_prompts() -> dict[str, str]:
+    """Return actual effective instructions using visible placeholders for input data."""
+    return {
+        "producer": PRODUCER_PROMPT,
+        "policy": POLICY,
+        "judge-system": JUDGE_SYSTEM_INSTRUCTION,
+        "faithfulness-source": MeetingFaithfulnessTemplate.generate_truths(retrieval_context="[LABELED TRANSCRIPT AND OPTIONAL CONTEXT]"),
+        "faithfulness-claims": MeetingFaithfulnessTemplate.generate_claims(actual_output="[SUMMARY]"),
+        "faithfulness-verdicts": MeetingFaithfulnessTemplate.generate_verdicts(
+            claims=["[EXTRACTED CLAIM]"], retrieval_context="[EXTRACTED SOURCE STATEMENTS]"),
+        "faithfulness-reason": MeetingFaithfulnessTemplate.generate_reason(
+            score="[COMPUTED SCORE]", contradictions=["[NEGATIVE OR BORDERLINE VERDICT REASON]"]),
+        "coverage": _rubric_text(COVERAGE_STEPS, COVERAGE_RUBRIC),
+        "clarity": _rubric_text(CLARITY_STEPS, CLARITY_RUBRIC),
+        "diagnostics": diagnostic_prompt("[TRANSCRIPT]", "[SUMMARY]", "[OPTIONAL PROVIDED CONTEXT]"),
+    }
+
+
+def export_prompts(output_dir: str | Path) -> Path:
+    """Write a new review bundle; exported copies do not change runtime prompts."""
+    output = Path(output_dir).expanduser().resolve()
+    prompts = review_prompts()
+    output.mkdir(parents=True, exist_ok=False)
+    entries = []
+    for name, prompt in prompts.items():
+        text = f"# {name}\n\n" + prompt.rstrip() + "\n"
+        (output / f"{name}.md").write_text(text, encoding="utf-8")
+        entries.append({"name": name, "file": f"{name}.md", "sha256": hashlib.sha256(text.encode()).hexdigest()})
+    manifest = {
+        "producer_template_version": TEMPLATE_VERSION,
+        "methodology_version": METHODOLOGY_VERSION,
+        "evaluator_fingerprint": evaluator_fingerprint(),
+        "prompts": entries,
+        "notes": [
+            "Review copies only. Runtime reads the packaged producer resource and Python prompt definitions.",
+            "Input data are placeholders. No transcript, credentials, or model responses were loaded.",
+            "coverage.md and clarity.md show configured steps/rubrics; DeepEval adds its scoring/schema wrapper.",
+        ],
+    }
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return output
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Review or export current prompts without making model calls.")
+    choices = tuple(review_prompts())
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--show", choices=choices, help="Print one current prompt")
+    action.add_argument("--output", type=Path, help="Export all prompts to a new directory")
+    args = parser.parse_args(argv)
+    if args.show:
+        print(review_prompts()[args.show])
+    elif args.output:
+        try:
+            print(f"Prompt review bundle: {export_prompts(args.output)}")
+        except OSError as exc:
+            parser.exit(2, f"Could not export prompts: {type(exc).__name__}. Choose a new writable directory.\n")
+    else:
+        print(f"Producer template {TEMPLATE_VERSION}; evaluation methodology {METHODOLOGY_VERSION}")
+        print("Available prompts:\n" + "\n".join(f"  {name}" for name in choices))
+        print("Use --show NAME to read a prompt, or --output NEW_DIRECTORY to export a review bundle.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

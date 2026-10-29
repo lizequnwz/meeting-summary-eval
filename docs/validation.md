@@ -9,7 +9,7 @@ invalidate the original methodology's scores as a comparison baseline.
 Current verification uses offline controlled judges and HTTP transports. It covers metric
 execution, faithfulness prompts, source identity, quote verification, structure rules,
 concurrency, client cleanup, error isolation, provenance, CSV/HTML safety, comparisons,
-and the repeat-trial calibration workflow. **112 offline tests passed** on Python 3.13.
+and the repeat-trial calibration workflow. **118 offline tests passed** on Python 3.13.
 The complete pipeline test used the actual LangChain client, OpenAI SDK, and DeepEval
 through simulated HTTP transports: two concurrent meetings, separate context, two saved
 runs, 24 simulated provider invocations, isolated usage totals, verified context quotes,
@@ -30,7 +30,7 @@ further requests after a judge configuration failure. `python scripts/calibrate.
 validated all **20 fictional cases**, with all **20 human reviews pending**, without model
 calls. These are draft design expectations, not calibrated accuracy evidence.
 
-Both notebooks were validated as notebook documents, their code cells checked for syntax,
+The live single-meeting and batch notebooks were validated as notebook documents, their code cells checked for syntax,
 and all saved outputs and execution counts removed. Their live execution was **not**
 repeated for methodology 2. The three teaching summaries satisfy the current deterministic
 structure checks; this says nothing about their semantic accuracy. Two examples deliberately
@@ -39,6 +39,24 @@ contain omissions or distortions despite valid structure.
 The offline CI workflow repeats the suite, manifest validation, and clean-notebook checks
 on Python 3.11 and 3.13. A configured CI workflow is not evidence that a remote CI run has
 already succeeded.
+
+## Offline learning path and prompt review
+
+The foundations tutorial, DeepEval metric lab, and prompt workbench executed top-to-bottom
+through local Jupyter kernels using the project's Python environment. Outgoing Python
+socket connections were disabled inside those kernels. The DeepEval lab used actual
+metric classes with explicitly authored judge responses; no hosted model was called.
+
+Executed notebooks and HTML copies were saved under
+`results/learning/20261029T021933Z-20370b65/`. All code cells completed without error.
+Output tables and links back to lessons, documentation, and source files were checked
+programmatically. Browser visual inspection of local HTML was unavailable because the
+browser policy blocked local-file URLs. Source notebooks retain no execution outputs.
+Optional live generation/evaluation cells in the prompt workbench were not executed.
+
+The new `meeting-eval-prompts` command and prompt bundle export were exercised without
+initializing a model. Exported file hashes were verified. The tutorial runner has its own
+offline CI job; that configuration is not evidence of an already completed remote run.
 
 ## Historical integration evidence: methodology 1
 
