@@ -120,7 +120,7 @@ def run_trials(manifest: dict, manifest_path: Path, *, model: str, trials: int, 
     provenance_keys = (
         "model", "judge_config", "versions", "evaluator_fingerprint", "metrics",
         "methodology_version",
-        "code_revision", "code_dirty", "sales_policy", "scoring", "max_concurrency",
+        "code_revision", "code_dirty", "business_context_sha256", "scoring", "max_concurrency",
     )
     provenance = {key: results[0].metadata[key] for key in provenance_keys if key in results[0].metadata}
     batch = BatchResult(

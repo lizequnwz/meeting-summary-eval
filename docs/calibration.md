@@ -10,7 +10,7 @@ Judge configuration failures stop further requests. The summary retains every se
 
 ## Human review
 
-1. Assemble representative real pairs with approved access and retention. Include good paraphrases, subtle unit/timeframe/negation errors, central omissions, attribution mistakes, generated outreach, unsupported advice, context-only facts, unanswered questions, corrections, and long or noisy transcripts.
+1. Assemble representative real pairs with approved access and retention. Include good paraphrases, subtle unit/timeframe/negation errors, central omissions, attribution mistakes, derived ideas, unsupported advice, context-only facts, unanswered questions, corrections, and long or noisy transcripts.
 2. Have subject-matter reviewers assess sources and summaries before seeing judge scores or draft design expectations; share only `review_cases.json` and the blank annotation template for a blind review. Annotate material issues, severity, review need, supported alternatives, and uncertainty. Record reviewer identity or an approved pseudonym and source version.
 3. Adjudicate disagreements. Preserve initial annotations; do not replace them with model findings. Mark unresolved cases uncertain rather than manufacture a binary label.
 4. Compare the judge against adjudicated material-issue and review labels. Report false positives and missed material issues with denominators and examples. Inspect numeric, omission, attribution, and recommendation cases separately where sample size permits.
@@ -20,6 +20,6 @@ Annotation fields remain blank or `pending`. Keep completed annotations separate
 
 ## Prompt comparisons
 
-Change one focused producer instruction at a time. Generate variants on the same approved meetings and evaluate with the same judge and methodology. Compare paired cases, including new and removed material findings. Score gains can coexist with consequential regressions. Repeat noisy cases and preserve infrastructure failures in the execution report.
+Change one focused producer instruction at a time. Generate variants on the same approved meetings and evaluate with the same judge, methodology, and business context. Compare paired cases, including new and removed material findings. Score gains can coexist with consequential regressions. Repeat noisy cases and preserve infrastructure failures in the execution report.
 
-Prefer concrete repairs: preserve corrected figures, distinguish basis points from returns, label generated outreach, retain attribution where needed, or state that a question was unanswered. Promote changes after human review of improvements and regressions, not merely because the evaluator suggested them. Revise judge prompts when independent evidence shows systematic false rejection or missed errors.
+Prefer concrete repairs: preserve corrected figures, preserve units and timeframes, label derived ideas, retain attribution where needed, or state that a question was unanswered. Promote changes after human review of improvements and regressions, not merely because the evaluator suggested them. Revise judge prompts when independent evidence shows systematic false rejection or missed errors.

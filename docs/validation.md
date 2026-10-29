@@ -1,11 +1,28 @@
 # Validation record
 
-## Current policy: methodology 3
+## Current policy: methodology 4
 
-The repository uses generic institutional attribution and six-section evaluation criteria,
+The evaluator now uses generic factuality, coverage, and optional clarity/conciseness
+criteria with one optional business-context block. Structure scoring and required summary
+headings have been removed.
+
+On October 29, 2026, **125 offline tests passed** on Python 3.13. The full provider-mock
+pipeline exercised planning and incident meetings with different summary layouts. Tests
+also covered business-context isolation from factual evidence, changed-context comparison
+rejection, generic prompt exports, and removal of structure scoring.
+
+All three offline learning notebooks executed successfully. The calibration manifest
+validated **23 fictional cases**, including planning, incident, and research meetings;
+their human reviews remain pending. Prompt export, CLI metric choices, clean notebook
+sources, documentation links, and dependency consistency were checked. No live model calls
+were made. These checks establish execution behavior, not calibrated semantic accuracy.
+
+## Historical verification: October 29, 2026, methodology 3
+
+That revision used generic institutional attribution and six-section evaluation criteria,
 separately supplied context, and labeled source-grounded outreach suggestions. Summaries
-are supplied as inputs. Compare runs only when their recorded evaluation conditions match;
-earlier methodology scores are not a comparison baseline for methodology 3.
+were supplied as inputs. Those recorded evaluation conditions form a separate historical
+baseline from methodology 4.
 
 On October 29, 2026, a fresh Python 3.13 environment installed the project with its
 development and notebook extras and current compatible dependencies. **121 offline tests
@@ -91,8 +108,8 @@ between 1.0 and approximately 0.93 faithfulness across runs.
 
 Those runs used the old four-section producer assumptions and explicit-discussion-only
 sales policy. Their results, notebook outputs, and local report paths are historical
-integration evidence only. They do not validate the current six-section contract,
-provided-context handling, or generated-outreach policy, and must not be used as the
+integration evidence only. They do not validate later policy revisions,
+provided-context handling, or derived-idea boundaries, and must not be used as the
 baseline for a current-methodology comparison. Old saved notebook outputs were removed
 to prevent their interpretation as current results.
 

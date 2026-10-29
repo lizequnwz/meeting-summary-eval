@@ -213,23 +213,26 @@ def test_evaluator_reuses_async_client_loop_across_sync_calls():
         first_loop = first_loop or loop
         assert loop is first_loop, "Evaluator reused its HTTP pool on another loop"
         count += 1
-        assert json.loads(request.content)["response_format"]["type"] == "json_schema"
+        payload = json.loads(request.content)
+        assert payload["response_format"]["type"] == "json_schema"
+        schema = payload["response_format"]["json_schema"]["name"]
+        response = {"score": 8, "reason": "Readable prose."} if schema == "ReasonScore" else {"findings": []}
         return httpx2.Response(200, json={
             "id": "offline-completion", "object": "chat.completion", "created": 0,
             "model": "offline-model",
             "choices": [{"index": 0, "message": {
-                "role": "assistant", "content": '{"qa_present": false, "findings": []}'
+                "role": "assistant", "content": json.dumps(response)
             }, "finish_reason": "stop"}],
         })
 
     client = DefaultAsyncHttpxClient(transport=httpx2.MockTransport(respond))
     model = ChatOpenAI(model="offline-model", api_key="offline-key", http_async_client=client)
-    with MeetingSummaryEvaluator(model=model, metrics=("structure",), env_file=None) as evaluator:
+    with MeetingSummaryEvaluator(model=model, metrics=("clarity",), env_file=None) as evaluator:
         first = evaluator.evaluate("Presenter: Rates are unchanged.", "A summary.")
         second = evaluator.evaluate("Presenter: Rates are unchanged.", "Another summary.")
         assert first.execution_status == "completed"
         assert second.execution_status == "completed"
-        assert count == 2
+        assert count == 4
     assert not client.is_closed  # A supplied model retains ownership of its pool.
     with pytest.raises(RuntimeError, match="closed"):
         evaluator.evaluate("Transcript", "Summary")

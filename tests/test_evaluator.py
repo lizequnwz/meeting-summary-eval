@@ -26,7 +26,7 @@ class FakeJudge:
         pass
 
     async def structured(self, prompt, schema):
-        return Diagnostics(qa_present=False, findings=[])
+        return Diagnostics(findings=[])
 
 
 class FakeMetric:
@@ -102,7 +102,7 @@ async def test_diagnostics_failure_never_means_clean_review(evaluator):
 async def test_high_scores_do_not_hide_material_findings(evaluator):
     class Critical(FakeJudge):
         async def structured(self, *args):
-            return Diagnostics(qa_present=False, findings=[Finding(kind="certainty_inflation", severity="high",
+            return Diagnostics(findings=[Finding(kind="certainty_inflation", severity="high",
                 description="A tentative source became a certainty.", evidence=[
                     Evidence(source="transcript", quote="It may rise.", verified=True, line_start=999),
                     Evidence(source="summary", quote="It will rise.")])])
@@ -197,7 +197,7 @@ async def test_global_configuration_failure_stops_queued_meetings(evaluator, tmp
 
 
 def test_validation():
-    for kwargs in ({"max_concurrency": 0}, {"metrics": []}, {"metrics": ["unknown"]}, {"max_retries": -1}):
+    for kwargs in ({"max_concurrency": 0}, {"metrics": []}, {"metrics": ["unknown"]}, {"metrics": ["structure"]}, {"max_retries": -1}):
         with pytest.raises(ValueError):
             MeetingSummaryEvaluator(env_file=None, **kwargs)
 
@@ -266,12 +266,16 @@ async def test_async_context_manager_closes_evaluator(evaluator):
         await evaluator.aevaluate("Source", "Summary")
 
 
-async def test_uncertain_qa_presence_remains_a_review_flag(evaluator):
-    class Uncertain(FakeJudge):
-        async def structured(self, *args):
-            return Diagnostics(qa_present=None, findings=[])
-    evaluator._judge = Uncertain()
-    result = await evaluator.aevaluate("Source", "Summary")
+@pytest.mark.parametrize("summary", [
+    "The launch is paused pending review. Rae owns the follow-up by Thursday.",
+    "- Rae will follow up by Thursday.\n- Launch is paused pending review.",
+    "# Team update\nThe launch is paused pending review.\n\n## Next step\nRae will follow up by Thursday.",
+])
+async def test_summary_format_does_not_create_a_metric_or_review_finding(evaluator, summary):
+    transcript = "Rae: The launch is paused pending review. I will follow up by Thursday."
+    result = await evaluator.aevaluate(transcript, summary)
     assert result.execution_status == "completed"
-    assert result.review_required
-    assert any("Q&A" in reason for reason in result.review_reasons)
+    assert set(result.metrics) == {"faithfulness", "coverage"}
+    assert result.findings == []
+    assert not result.review_required
+    assert result.metadata["business_context_sha256"] is None

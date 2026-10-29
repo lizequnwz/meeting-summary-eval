@@ -28,12 +28,11 @@ def test_aggregate_excludes_missing_and_failed_scores():
 
 def test_issue_denominators_only_include_completed_diagnostics():
     finding = Finding(kind="unsupported_claim", severity="high", description="Example")
-    structure = Finding(kind="structure", severity="low", description="Missing heading")
     results = [
         MeetingResult(meeting_id="flagged", metadata={"diagnostics_status": "completed"}, findings=[finding, finding]),
         MeetingResult(meeting_id="clear", metadata={"diagnostics_status": "completed"}),
         MeetingResult(meeting_id="failed", metadata={"diagnostics_status": "error"}),
-        MeetingResult(meeting_id="unknown", findings=[structure], metrics={"structure": MetricResult(name="structure", score=0.5)}),
+        MeetingResult(meeting_id="unknown"),
     ]
     stats = aggregate_results(results)
     assert stats["diagnostics_completed_count"] == 2
@@ -45,7 +44,6 @@ def test_issue_denominators_only_include_completed_diagnostics():
         "meeting_fraction": 0.5,
         "denominator_type": "completed_diagnostics",
     }
-    assert stats["issue_categories"]["structure"]["meeting_denominator"] == 1
 
 
 def test_unknown_diagnostic_coverage_is_not_assumed_successful():

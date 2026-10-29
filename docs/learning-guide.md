@@ -87,7 +87,6 @@ Use ordinary Jupyter, rather than this runner, for deliberate live experiments.
 | `FaithfulnessMetric` | No | Extract summary claims and source statements, judge support, calculate a supported-claim ratio. |
 | `GEval` for coverage | No | Apply the configured evaluation steps and importance rubric to the source and summary. |
 | `SummarizationMetric` in LLM mode | Optional | Check alignment and question-based coverage; generate assessment questions if you do not supply them. |
-| Package structure check | No | Parse headings, bullets, absence markers, and tags deterministically. |
 
 Our default is **FaithfulnessMetric + GEval coverage + structured diagnostics**. The lab
 also teaches SummarizationMetric as an alternative experiment; it is not silently added
@@ -117,7 +116,7 @@ The correct field mapping depends on the metric. In this package:
 
 | Field | Meaning |
 | --- | --- |
-| `input` | Evaluation instructions and format criteria. It does not have to be an English question. |
+| `input` | Generic evaluation instructions and optional audience/purpose context. It does not have to be an English question. |
 | `actual_output` | The generated meeting summary. |
 | `retrieval_context` | Labeled full transcript and optional supplied context. This package has no retriever. |
 | `expected_output` | Not required for these reference-free metrics. |
@@ -135,14 +134,16 @@ requiring one canonical reference summary.
 ## Where should I review or edit the prompts?
 
 Judge prompts tell this package how to evaluate a supplied summary. Review the shared
-evaluation policy first, then the metric and diagnostic instructions. Keep those rules
+evaluation policy first, then the metric and diagnostic instructions. The generic policy
+has no required headings or format grading. Keep those rules
 fixed when comparing summaries so a judge change does not alter the benchmark.
 
 | File | Role | When to edit |
 | --- | --- | --- |
-| [policy.py](../src/meeting_eval/policy.py) | Shared source, attribution, context, and outreach policy. | Deliberately change what counts as supported or acceptable. |
+| [policy.py](../src/meeting_eval/policy.py) | Generic source, attribution, and evidence policy. | Deliberately change what counts as supported or acceptable. |
+| [business-context.md](../examples/business-context.md) | One optional audience and purpose block. | Apply the evaluator to a different meeting type without changing the generic policy. |
 | [metrics.py](../src/meeting_eval/metrics.py) | Faithfulness extraction/verdict prompts, coverage steps/rubric, clarity rubric. | Correct demonstrated judge errors or redefine a scoring dimension. |
-| [diagnostics.py](../src/meeting_eval/diagnostics.py) | Evidence-rich diagnostic prompt and deterministic structure checks. | Improve omission/severity findings, suggestions, evidence rules, or format checks. |
+| [diagnostics.py](../src/meeting_eval/diagnostics.py) | Evidence-rich diagnostic prompt and exact quotation checks. | Improve omission/severity findings, suggestions, or evidence rules. |
 | [judge.py](../src/meeting_eval/judge.py) | System instructions, structured-output adapter, request limits, usage collection. | Change the model-call boundary, rather than editorial preferences. |
 
 You can review effective prompts without opening Python files or making model requests:
@@ -152,6 +153,8 @@ You can review effective prompts without opening Python files or making model re
 .venv/bin/meeting-eval-prompts --show policy
 .venv/bin/meeting-eval-prompts --show coverage
 .venv/bin/meeting-eval-prompts --output results/prompt-review-001
+.venv/bin/meeting-eval-prompts --business-context examples/business-context.md \
+  --output results/prompt-review-with-context-001
 ```
 
 The export contains the shared policy, system instruction, four
@@ -159,6 +162,7 @@ faithfulness-stage prompts, coverage/clarity steps and rubrics, diagnostic promp
 fingerprint manifest. Source data are visible placeholders. DeepEval adds its own scoring
 wrapper around the exported GEval steps; these are not stored private model thoughts.
 Exports are **review copies**; editing them does not alter runtime instructions.
+When supplied, the audience and purpose block is exported separately as `business-context.md`.
 
 For an experiment, supply baseline and candidate summaries from the same sources and keep
 the evaluation policy fixed. Lesson 04 records the inputs and compares compatible saved
@@ -166,10 +170,26 @@ runs. When changing evaluation criteria, update the methodology version, example
 related documentation together, and establish a new baseline. Restart a notebook kernel
 after source prompt edits so imported constants do not remain stale.
 
+## Set the audience and purpose once
+
+Pass `business_context` when constructing `MeetingSummaryEvaluator`, or use CLI
+`--business-context FILE`. The [example block](../examples/business-context.md) contains
+the existing Zoom workflow's goals. Keep domain preferences there; reuse the same generic
+faithfulness, coverage, and clarity prompts across other meeting types. Omitting the block
+uses the meeting's own emphasis and consequences to assess importance.
+
+Business context guides reader needs and salience. It is not factual evidence, and it
+cannot require a particular summary structure. `provided_context` is different: it is an
+additional factual source that the producer also received. Keep both context identities
+fixed when comparing runs.
+
+There is no structure score. Optional `clarity` evaluates clarity and conciseness without
+heading, section, bullet, or word-count rules. Indexing metadata is outside content scoring.
+
 ## Use it on a real meeting
 
 1. Read one transcript and its summary yourself. Note the main points, numbers,
-   qualifiers, speaker attribution, and one error you would care about in a client conversation.
+   qualifiers, speaker attribution, and one error you would care about for the meeting's intended readers.
 2. Save the exact producer inputs: transcript, summary, and any context the producer received.
    Start with the single-meeting notebook; do not tune a threshold on one case.
 3. Inspect execution status first. A timeout or schema failure is an incomplete evaluation,
@@ -193,9 +213,8 @@ supply them to lesson 04. This package evaluates those summaries; it does not ge
 - **A short summary is faithful but incomplete:** included claims can all be correct while central information is missing. Inspect coverage separately.
 - **A high score still has a material error:** a supported-claim ratio can dilute one severe mistake. Read diagnostic findings.
 - **The wording looks different but the meaning is right:** paraphrases should be accepted; lexical overlap is not the objective.
-- **An outreach idea was never spoken:** labeled derived outreach can be valid; invented facts, endorsement, products, and guarantees remain unsupported.
+- **A suggested idea was never spoken:** a clearly presented derived idea can be valid; invented factual premises or claimed meeting endorsements remain unsupported. No exact label is required.
 - **A context fact becomes a meeting claim:** supplied background cannot establish that someone said or agreed to it in the meeting.
-- **A structure score is perfect:** formatting does not establish faithfulness or coverage.
 - **A repeated run changes slightly:** do not interpret one small difference as a producer improvement. Inspect the cases and repeat them.
 - **An endpoint rejects a schema:** check model/structured-output support. Switching the score to zero would hide the infrastructure failure.
 

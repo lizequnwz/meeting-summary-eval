@@ -9,7 +9,7 @@ from meeting_eval.models import BatchResult, MeetingResult, MetricResult
 def batch(run_id, score):
     metadata = {"evaluator_fingerprint": "policy", "model": "judge", "judge_config": {
         "endpoint": "https://example.invalid/v1", "custom_parameters_present": False},
-        "versions": {"deepeval": "4.3.2"}, "metrics": ["coverage"]}
+        "versions": {"deepeval": "4.3.2"}, "metrics": ["coverage"], "business_context_sha256": None}
     meeting = MeetingResult(meeting_id="one", metrics={"coverage": MetricResult(name="coverage", score=score)},
         metadata={**metadata, "transcript_sha256": "source", "context_sha256": None,
                   "diagnostics_status": "completed"})
@@ -30,7 +30,7 @@ def test_paired_comparison_preserves_missing_scores_and_excludes_incomplete_pair
     assert comparison["metric_deltas"]["coverage"]["mean_delta"] is None
 
 
-@pytest.mark.parametrize("key", ["evaluator_fingerprint", "model", "judge_config", "versions", "metrics"])
+@pytest.mark.parametrize("key", ["evaluator_fingerprint", "model", "judge_config", "versions", "metrics", "business_context_sha256"])
 def test_different_judge_or_policy_cannot_appear_comparable(key):
     baseline, candidate = batch("baseline", 0.5), batch("candidate", 0.8)
     candidate.metadata[key] = "changed"
@@ -74,4 +74,20 @@ def test_changed_provider_model_snapshot_is_not_hidden_by_same_requested_alias()
     baseline.results[0].metadata["usage"] = {"response_models": ["snapshot-one"]}
     candidate.results[0].metadata["usage"] = {"response_models": ["snapshot-two"]}
     with pytest.raises(ValueError, match="response models changed"):
+        compare_batches(baseline, candidate)
+
+
+@pytest.mark.parametrize("scope", ["run", "meeting"])
+def test_missing_business_context_identity_cannot_appear_comparable(scope):
+    baseline, candidate = batch("baseline", 0.5), batch("candidate", 0.8)
+    metadata = candidate.metadata if scope == "run" else candidate.results[0].metadata
+    del metadata["business_context_sha256"]
+    with pytest.raises(ValueError, match="business_context_sha256"):
+        compare_batches(baseline, candidate)
+
+
+def test_meeting_business_context_must_match_the_recorded_run():
+    baseline, candidate = batch("baseline", 0.5), batch("candidate", 0.8)
+    candidate.results[0].metadata["business_context_sha256"] = "changed-context"
+    with pytest.raises(ValueError, match="business_context_sha256"):
         compare_batches(baseline, candidate)

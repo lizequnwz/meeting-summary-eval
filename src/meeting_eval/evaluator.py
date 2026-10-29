@@ -14,12 +14,12 @@ from langchain_openai import ChatOpenAI
 from openai import AuthenticationError, BadRequestError, NotFoundError, PermissionDeniedError
 
 from .config import prepare_environment
-from .diagnostics import check_structure, diagnostic_prompt, evidence_complete, verify_evidence
+from .diagnostics import diagnostic_prompt, evidence_complete, verify_evidence
 from .inputs import discover_pairs, normalize_text
 from .judge import LangChainJudge
-from .metrics import create_metrics
+from .metrics import AVAILABLE_METRICS, DEFAULT_METRICS, create_metrics
 from .models import BatchResult, Diagnostics, MeetingResult, MetricResult
-from .policy import METHODOLOGY_VERSION, POLICY
+from .policy import METHODOLOGY_VERSION, evaluation_instructions
 from .provenance import runtime_metadata
 
 
@@ -67,8 +67,9 @@ def _plain(value):
 
 class MeetingSummaryEvaluator:
     def __init__(self, model: str | ChatOpenAI | None = None, max_concurrency: int = 4,
-                 metrics: tuple[str, ...] | list[str] = ("faithfulness", "coverage"),
-                 env_file: str | Path | None = ".env", timeout: float = 120, max_retries: int = 2):
+                 metrics: tuple[str, ...] | list[str] = DEFAULT_METRICS,
+                 env_file: str | Path | None = ".env", timeout: float = 120, max_retries: int = 2,
+                 business_context: str | None = None):
         prepare_environment(env_file)
         if not isinstance(max_concurrency, int) or isinstance(max_concurrency, bool) or max_concurrency < 1:
             raise ValueError("max_concurrency must be a positive integer")
@@ -76,15 +77,20 @@ class MeetingSummaryEvaluator:
                 or not math.isfinite(timeout) or timeout <= 0
                 or not isinstance(max_retries, int) or isinstance(max_retries, bool) or max_retries < 0):
             raise ValueError("timeout must be positive and max_retries nonnegative")
-        if not metrics or set(metrics) - {"faithfulness", "coverage", "structure", "clarity"}:
-            raise ValueError("metrics must select faithfulness, coverage, structure or clarity")
+        if not metrics or set(metrics) - set(AVAILABLE_METRICS):
+            raise ValueError("metrics must select faithfulness, coverage or clarity")
         if len(metrics) != len(set(metrics)):
             raise ValueError("metrics must not contain duplicates")
+        if business_context is not None:
+            if not isinstance(business_context, str) or not normalize_text(business_context).strip():
+                raise ValueError("Business context must contain text, or be omitted.")
+            business_context = normalize_text(business_context)
         self.model = model if model is not None else os.getenv("OPENAI_MODEL", "gpt-6-luna")
         self.max_concurrency = max_concurrency
         self.metric_names = tuple(metrics)
         self.timeout = timeout
         self.max_retries = max_retries
+        self.business_context = business_context
         self._judge = None
         self._runner = None
         self._closed = False
@@ -104,7 +110,7 @@ class MeetingSummaryEvaluator:
         return {**runtime_metadata(model, timeout=self.timeout, max_retries=self.max_retries),
                 "metrics": list(self.metric_names),
                 "methodology_version": METHODOLOGY_VERSION,
-                "sales_policy": "grounded_facts_labeled_derived_outreach",
+                "business_context_sha256": hashlib.sha256(self.business_context.encode()).hexdigest() if self.business_context is not None else None,
                 "scoring": "separate_scores_no_acceptance_gate", "max_concurrency": self.max_concurrency,
                 "timestamp": datetime.now(timezone.utc).isoformat()}
 
@@ -195,12 +201,12 @@ class MeetingSummaryEvaluator:
         sources = [{"source": "transcript", "text": transcript}]
         if provided_context is not None:
             sources.append({"source": "context", "text": provided_context})
-        test_case = LLMTestCase(input=POLICY, actual_output=summary,
+        test_case = LLMTestCase(input=evaluation_instructions(self.business_context), actual_output=summary,
                                retrieval_context=[json.dumps(source, ensure_ascii=False) for source in sources])
         try:
             judge = self.judge
             result.metadata.update(self._metadata())
-            metric_objects = create_metrics(judge, names=tuple(n for n in self.metric_names if n != "structure"))
+            metric_objects = create_metrics(judge, names=self.metric_names)
         except Exception as exc:
             result.errors.append(_error_message(exc))
             result.execution_status = "error"
@@ -259,24 +265,17 @@ class MeetingSummaryEvaluator:
                     result.metadata["judge_configuration_error"] = True
                     break
 
-        qa_present = None
         if not result.metadata.get("judge_configuration_error"):
             try:
                 with judge.stage("diagnostics"):
-                    diagnostics = await judge.structured(diagnostic_prompt(transcript, summary, provided_context), Diagnostics)
+                    diagnostics = await judge.structured(
+                        diagnostic_prompt(transcript, summary, provided_context, self.business_context), Diagnostics)
                 result.findings = verify_evidence(diagnostics.findings, transcript, summary, provided_context)
-                qa_present = diagnostics.qa_present
                 result.metadata["diagnostics_status"] = "completed"
-                result.metadata["qa_present"] = qa_present
-                if qa_present is None:
-                    result.review_reasons.append("The source does not establish whether substantive Q&A occurred.")
             except Exception as exc:
                 result.metadata["diagnostics_status"] = "error"
                 result.metadata["judge_configuration_error"] = _global_error(exc)
                 result.errors.append(f"diagnostics: {_error_message(exc)}")
-        if "structure" in self.metric_names:
-            result.metrics["structure"], structure_findings = check_structure(summary, qa_present)
-            result.findings.extend(structure_findings)
         for name in self.metric_names:
             if name not in result.metrics:
                 result.metrics[name] = MetricResult(name=name, status="error", reason="Not run after judge configuration failure.")

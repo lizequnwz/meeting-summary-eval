@@ -34,3 +34,9 @@ To review the evaluation criteria immediately, open
 [policy.py](../src/meeting_eval/policy.py), or run
 `meeting-eval-prompts --show policy`. Review exports are copies; editing them does not
 change the package's prompts.
+
+The core prompts work with any meeting type and summary layout. For the bundled workflow,
+load the single optional [business-context block](../examples/business-context.md); replace
+or omit it for other meetings. It guides audience needs and importance, while supplied
+source context remains factual evidence. No lesson or metric grades summary structure.
+Optional `clarity` combines clarity and conciseness.

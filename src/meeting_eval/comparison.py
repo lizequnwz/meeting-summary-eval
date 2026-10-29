@@ -20,7 +20,7 @@ def compare_batches(baseline: BatchResult, candidate: BatchResult) -> dict:
     for batch in (baseline, candidate):
         if not batch.results or len({r.meeting_id for r in batch.results}) != len(batch.results):
             raise ValueError("Comparison requires nonempty runs with unique meeting IDs.")
-    for key in ("evaluator_fingerprint", "model", "judge_config", "versions", "metrics"):
+    for key in ("evaluator_fingerprint", "model", "judge_config", "versions", "metrics", "business_context_sha256"):
         if key not in baseline.metadata or key not in candidate.metadata:
             raise ValueError(f"Comparison requires recorded {key} in both runs.")
         if baseline.metadata[key] != candidate.metadata[key]:
@@ -48,8 +48,8 @@ def compare_batches(baseline: BatchResult, candidate: BatchResult) -> dict:
             if before.metadata[key] != after.metadata[key]:
                 raise ValueError(f"Source inputs changed for meeting {meeting_id}.")
         for result in (before, after):
-            for key in ("evaluator_fingerprint", "model", "judge_config", "versions", "metrics"):
-                if result.metadata.get(key) != baseline.metadata[key]:
+            for key in ("evaluator_fingerprint", "model", "judge_config", "versions", "metrics", "business_context_sha256"):
+                if key not in result.metadata or result.metadata[key] != baseline.metadata[key]:
                     raise ValueError(f"Meeting {meeting_id} does not match the run's {key}.")
         row = {
             "meeting_id": meeting_id,
@@ -86,6 +86,7 @@ def compare_batches(baseline: BatchResult, candidate: BatchResult) -> dict:
     return {
         "baseline_run_id": baseline.run_id, "candidate_run_id": candidate.run_id,
         "evaluator_fingerprint": baseline.metadata["evaluator_fingerprint"],
+        "business_context_sha256": baseline.metadata["business_context_sha256"],
         "meeting_count": len(rows), "complete_pair_count": sum(row["complete_pair"] for row in rows),
         "metric_deltas": deltas, "rows": rows, "high_severity_findings": findings,
         "interpretation": "Positive score deltas favor the candidate. Findings remain judge assessments. Repeat trials and human review are needed to distinguish improvements from judge variation.",

@@ -23,28 +23,22 @@ async def test_offline_provider_to_reports_and_paired_comparison(tmp_path):
         directory.mkdir()
 
     identifiers = {"alpha": "PipelineAlpha", "beta": "PipelineBeta"}
-    context_quotes = {name: f"{identifier}: RIC may mean Regional Investment Consultant."
+    context_quotes = {name: f"{identifier}: SLO may mean Service Level Objective."
                       for name, identifier in identifiers.items()}
+    source_statements = {"alpha": "The launch remains paused pending accessibility review.",
+                         "beta": "The service remains degraded while the recovery job runs."}
+    business_context = "Engineering delivery leads reviewing launch readiness and service recovery."
     for meeting_id, identifier in identifiers.items():
-        (transcripts / f"{meeting_id}.txt").write_text(f"{identifier}: Rates are unchanged.\n", encoding="utf-8")
+        (transcripts / f"{meeting_id}.txt").write_text(f"{identifier}: {source_statements[meeting_id]}\n", encoding="utf-8")
         (contexts / f"{meeting_id}.txt").write_text(
             "Supplementary terminology context.\n" + context_quotes[meeting_id] + "\n", encoding="utf-8")
-        summary = f"""## Executive Briefing
-- {identifier} reported unchanged rates.
-## Economy & Market Updates
-- Rates are unchanged.
-## Advisor Outreach & Sales Actions
-- Suggested outreach: Explore whether unchanged rates affect advisor conversations.
-## Market & Institutional Perspectives
-- The supplied context says RIC may mean Regional Investment Consultant for {identifier}.
-## Questions and Answers
-No substantive Q&A occurred.
-## Search Tags
-Interest Rates, Advisor Conversations
-"""
+        summary = (f"{identifier} reported: {source_statements[meeting_id]} "
+                   f"The supplied glossary says SLO may mean Service Level Objective for {identifier}.")
+        if meeting_id == "beta":
+            summary = "# Incident follow-up\n\n- " + summary
         (baseline_summaries / f"{meeting_id}.md").write_text(summary, encoding="utf-8")
         (candidate_summaries / f"{meeting_id}.md").write_text(
-            summary.replace("reported unchanged rates", "reported that rates remain unchanged"), encoding="utf-8")
+            summary.replace("remains", "is still"), encoding="utf-8")
 
     active = peak = 0
     schema_calls = Counter()
@@ -75,13 +69,17 @@ Interest Rates, Advisor Conversations
                 identifier = identifiers[meeting_id]
                 routed_calls[meeting_id] += 1
                 input_tokens, output_tokens = (11, 3) if meeting_id == "alpha" else (21, 4)
+            if schema_name in {"ReasonScore", "Diagnostics"}:
+                assert business_context in prompt
+            else:
+                assert business_context not in prompt
             if schema_name in {"Truths", "ReasonScore", "Diagnostics"}:
                 assert context_quotes[meeting_id] in prompt
             if schema_name == "Truths":
-                result = {"truths": [f"transcript: {identifier}: Rates are unchanged.",
+                result = {"truths": [f"transcript: {identifier}: {source_statements[meeting_id]}",
                                       f"context: {context_quotes[meeting_id]}"]}
             elif schema_name == "Claims":
-                result = {"claims": [f"{identifier} reported unchanged rates.",
+                result = {"claims": [f"{identifier} reported: {source_statements[meeting_id]}",
                                       f"The context says {context_quotes[meeting_id]}"]}
             elif schema_name == "Verdicts":
                 result = {"verdicts": [{"verdict": "yes", "reason": None},
@@ -89,12 +87,12 @@ Interest Rates, Advisor Conversations
             elif schema_name == "FaithfulnessScoreReason":
                 result = {"reason": "The extracted claims received no negative verdicts."}
             elif schema_name == "ReasonScore":
-                result = {"score": 8, "reason": "The core rate observation is represented."}
+                result = {"score": 8, "reason": "The central operational observation is represented."}
             elif schema_name == "Diagnostics":
-                result = {"qa_present": False, "findings": [{
+                result = {"findings": [{
                     "kind": "uncertainty", "severity": "medium",
                     "description": "The supplied role expansion is explicitly tentative.",
-                    "section": "Market & Institutional Perspectives", "suggested_prompt_change": None,
+                    "section": None, "suggested_prompt_change": None,
                     "evidence": [{"source": "context", "quote": context_quotes[meeting_id],
                                   "line_start": None, "line_end": None, "verified": False}],
                 }]}
@@ -118,7 +116,8 @@ Interest Rates, Advisor Conversations
                        base_url="https://pipeline.invalid/v1", timeout=10, max_retries=0,
                        http_async_client=async_client, http_client=sync_client)
     try:
-        async with MeetingSummaryEvaluator(model=model, env_file=None, max_concurrency=2) as evaluator:
+        async with MeetingSummaryEvaluator(model=model, env_file=None, max_concurrency=2,
+                                           business_context=business_context) as evaluator:
             baseline = await evaluator.aevaluate_batch(
                 transcripts, baseline_summaries, tmp_path / "reports", context_dir=contexts)
             candidate = await evaluator.aevaluate_batch(
@@ -150,6 +149,7 @@ Interest Rates, Advisor Conversations
             evidence = result.findings[0].evidence[0]
             assert evidence.source == "context" and evidence.quote == context_quotes[result.meeting_id]
             assert evidence.verified and evidence.line_start == evidence.line_end == 2
+            assert result.metadata["business_context_sha256"] == hashlib.sha256(business_context.encode()).hexdigest()
             assert result.metadata["context_sha256"] == hashlib.sha256(
                 (contexts / f"{result.meeting_id}.txt").read_bytes()).hexdigest()
             assert result.metadata["context_path"] == str((contexts / f"{result.meeting_id}.txt").resolve())

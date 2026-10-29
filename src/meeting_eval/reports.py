@@ -77,10 +77,9 @@ def aggregate_results(results: list[MeetingResult]) -> dict[str, Any]:
         issue_counts.update(f.kind for f in result.findings)
         issue_meetings.update({f.kind for f in result.findings})
     diagnostics_completed = [r for r in results if r.metadata.get("diagnostics_status") == "completed"]
-    structure_completed = [r for r in results if r.metrics.get("structure") is not None and r.metrics["structure"].status == "completed"]
     issues = {}
     for kind, count in sorted(issue_counts.items(), key=lambda item: (-issue_meetings[item[0]], item[0])):
-        assessed = structure_completed if kind == "structure" else diagnostics_completed
+        assessed = diagnostics_completed
         affected = sum(any(f.kind == kind for f in r.findings) for r in assessed)
         issues[kind] = {
             "finding_count": count,
@@ -88,7 +87,7 @@ def aggregate_results(results: list[MeetingResult]) -> dict[str, Any]:
             "assessed_meeting_count": affected,
             "meeting_denominator": len(assessed),
             "meeting_fraction": affected / len(assessed) if assessed else None,
-            "denominator_type": "completed_structure_metrics" if kind == "structure" else "completed_diagnostics",
+            "denominator_type": "completed_diagnostics",
         }
     usage = [r.metadata["usage"] for r in results if "usage" in r.metadata]
     requests = sum(item["request_count"] for item in usage)
@@ -115,7 +114,7 @@ def aggregate_results(results: list[MeetingResult]) -> dict[str, Any]:
             "output_tokens": sum(item.get("output_tokens") or 0 for item in usage) if usage_complete else None,
             "total_tokens": sum(item.get("total_tokens") or 0 for item in usage) if usage_complete else None,
         },
-        "issue_denominator_description": "Issue rates use only meetings with completed structured diagnostics. Structure issues use completed structure metrics. Failed, skipped, and unknown diagnostic states are excluded; finding counts include all returned findings.",
+        "issue_denominator_description": "Issue rates use only meetings with completed structured diagnostics. Failed, skipped, and unknown diagnostic states are excluded; finding counts include all returned findings.",
     }
 
 
@@ -270,7 +269,7 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meeting summary evaluation report</title><style>{_CSS}</style></head>
 <body><main>
 <header><p class="eyebrow">Meeting Summary Evaluation</p><h1>Meeting summary quality,<br>with the evidence in view.</h1>
-<p class="subtitle">Evaluations grounded in the meeting transcript and explicitly supplied context. Compare dimensions separately, then inspect the findings that matter for advisor and client conversations.</p>
+<p class="subtitle">Evaluations grounded in the meeting transcript and explicitly supplied factual context. Compare dimensions separately, then inspect the findings that matter for the meeting’s intended audience.</p>
 <p class="run-id">Run {_e(batch.run_id)} · {_e(statuses)}</p>
 <details class="metadata"><summary>Evaluation policy and judge configuration</summary><pre>{provenance}</pre></details></header>
 <section class="kpis" aria-label="Run overview">
@@ -286,8 +285,8 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
 <section aria-labelledby="meeting-heading"><h2 id="meeting-heading">Inspect each meeting</h2><div class="toolbar"><input id="meeting-search" type="search" placeholder="Find a meeting ID" aria-label="Find a meeting ID"><label><input id="review-only" type="checkbox">Only meetings requiring review</label><button id="expand-all" type="button">Expand visible meetings</button></div>
 <p id="filter-empty" class="muted" hidden>No meetings match this filter.</p>{meetings or '<p class="muted">No meeting results are available.</p>'}</section>
 <section class="panel" style="margin-top:28px"><h2>Reading this report</h2><div class="legend"><p><strong>Execution status.</strong> Completed means the requested evaluation ran; it does not mean the summary passed. Partial means some requested work failed. Invalid means the input could not be evaluated. Error means evaluation failed.</p>
-<p><strong>Evidence and judgment.</strong> Quote verification checks that cited text occurs in the transcript, supplied context, or summary; it does not prove the judge interpreted it correctly. Labeled suggested outreach is assessed separately from claims that a meeting recommendation was made. Unsupported claims and ambiguous passages require human judgment. A review flag does not constitute a confirmed financial or policy finding.</p></div></section>
-<p class="footer">The transcript establishes what was said and can contain transcription errors. Supplied context remains a separate source. Review consequential claims and institutional view attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
+<p><strong>Evidence and judgment.</strong> Quote verification checks that cited text occurs in the transcript, supplied factual context, or summary; it does not prove the judge interpreted it correctly. Clearly presented suggestions are assessed separately from claims that a meeting decision or recommendation was made. Unsupported claims and ambiguous passages require human judgment. A review flag does not constitute a confirmed factual error.</p></div></section>
+<p class="footer">The transcript establishes what was said and can contain transcription errors. Supplied factual context remains a separate source. Audience and purpose context guides importance and supplies no factual evidence. Review consequential claims and speaker attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
 </main><script>
 const search=document.getElementById('meeting-search');
 const review=document.getElementById('review-only');

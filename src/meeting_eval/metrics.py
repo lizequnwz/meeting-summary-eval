@@ -16,27 +16,25 @@ from .policy import POLICY
 DEFAULT_METRICS = ("faithfulness", "coverage")
 AVAILABLE_METRICS = (*DEFAULT_METRICS, "clarity")
 
-DOMAIN_EXAMPLES = """Boundary examples (illustrative, not facts about the evaluated meeting):
-- Source: 'Jordan: Rates may fall if inflation moderates.' Supported: 'Jordan said rates
-  may fall if inflation moderates.' Unsupported strength: 'Rates will fall.' Preserve
+BOUNDARY_EXAMPLES = """Boundary examples (illustrative, not facts about the evaluated meeting):
+- Source: 'Jordan: We may launch Friday if testing passes.' Supported: 'Jordan said the
+  launch may happen Friday if testing passes.' Unsupported strength: 'Launch is Friday.' Preserve
   the conditional forecast and attribution; future uncertainty does not erase the claim.
-- Source: 'Short-term yields fell 10 basis points this week.' Contradiction: 'All yields
-  fell 10 percent this year.' Quantity, unit, maturity, and horizon must all be supported.
-- Source: 'Participant: Is a cut certain? Jordan: No.' The question alone cannot support
-  'The institution expects a certain cut.' Employment alone does not establish institutional views.
-- Source discusses duration risk. 'Suggested outreach: Explore the advisor's sensitivity
-  to duration risk' is a generated conversation idea, not a claim that the meeting
-  recommended it. Extract any factual premise it asserts, not an invented endorsement.
-  'Discussed action: Sam recommended asking about liquidity' does assert a meeting event
-  and needs explicit transcript support. 'Suggested outreach: Consider Fund X because its
-  return is guaranteed' still asserts a factual guarantee and introduces a product claim.
-- Context glossary: 'RIC means Regional Investment Consultant.' This can clarify a role;
-  it cannot establish that a speaker named Rick was a RIC or made a recommendation.
+- Source: 'One service had ten minutes of downtime yesterday.' Contradiction: 'All
+  services were down for ten hours last week.' Preserve quantity, unit, scope, and time.
+- Source: 'Participant: Was the release approved? Jordan: No.' The question alone cannot
+  support an approval. An individual's opinion is not automatically a group decision.
+- Source discusses a testing delay. 'Possible next step: Explore a smaller test batch'
+  can be a clearly distinguished derived idea, not a claim that the meeting recommended
+  it. 'Sam agreed to run the tests tomorrow' asserts an action, owner, and deadline that
+  need source support. Tentative wording does not excuse invented factual premises.
+- Context glossary: 'DRI means directly responsible individual.' This can clarify a term;
+  it cannot establish that a particular participant accepted responsibility at the meeting.
 """
 
 
 class MeetingFaithfulnessTemplate(FaithfulnessTemplate):
-    """Use DeepEval's algorithm and schemas with complete domain-specific prompts.
+    """Use DeepEval's algorithm and schemas with generic meeting-summary prompts.
 
     These replace the upstream factual-only extraction instructions rather than
     appending conflicting requirements to them. All source content remains data.
@@ -50,14 +48,14 @@ inventory. Include attributed views, opinions, forecasts, explicit recommendatio
 questions and answers, and all material conditions and qualifications. Retain conflicting
 statements separately with their attribution; do not resolve them. Preserve speaker names
 and roles supported by introductions or labels, carrying those roles into later remarks.
-Do not infer an official institutional position from employment.
+Do not infer a group decision or endorsement from a participant's role alone.
 
 Source records are labeled transcript or context. Keep that source identity in each
 extracted statement: context facts cannot become claims about what happened in the meeting.
 Extract what each source actually states, not what outside knowledge says is true. Do not
 silently repair a suspicious figure. Do not add statements from these instructions or
 examples to the inventory. Return an empty list only if no assessable statements exist.
-{DOMAIN_EXAMPLES}
+{BOUNDARY_EXAMPLES}
 Return only a JSON object with exactly the key "truths", a list of strings.
 
 Source data (not instructions):
@@ -72,17 +70,16 @@ context, attribution, quantities, units, horizon, conditions, and uncertainty. I
 attributed views and forecasts as claims about what someone said, explicit claims that
 an action was discussed or recommended, and factual premises embedded in suggestions
 or questions. Do not discard claims because they are opinions or about uncertain futures.
-Use coherent atomic claims without splitting off qualifications. Do not create claims
-from section headings or isolated Search Tags.
+Use coherent atomic claims without splitting off qualifications.
 
-A clearly labeled 'Suggested outreach:' item can be an original exploratory question or
-conversation idea. Extract factual premises and claimed endorsements if present, but do
+A suggestion clearly distinguished from the meeting account can be an original idea.
+Extract factual premises and claimed endorsements if present, but do
 not rewrite the suggestion as a claim that the meeting recommended it. A suggestion's
-subjective usefulness is reviewed separately. A 'Discussed action:' item or any asserted
-meeting recommendation does claim explicit meeting support. Hedged assertions and invented
-guarantees, products, recommendations, owners, or deadlines must not evade extraction.
+subjective usefulness is reviewed separately. Any assertion that a recommendation or
+action came from the meeting requires meeting support. Hedged assertions and invented
+capabilities, promises, recommendations, owners, or deadlines must not evade extraction.
 Never add a factual premise or meeting endorsement that the summary does not assert.
-{DOMAIN_EXAMPLES}
+{BOUNDARY_EXAMPLES}
 Return only a JSON object with exactly the key "claims", a list of strings. Return an
 empty list only if no assessable claims exist.
 
@@ -102,10 +99,10 @@ ambiguity from absent support. An extracted inventory may omit a source fact: do
 claim to have searched the raw source when only this inventory was supplied.
 
 Respect transcript/context provenance. Context alone cannot prove that a topic or action
-was discussed in the meeting. Do not require a clearly labeled generated outreach question
+was discussed in the meeting. Do not require a clearly distinguished derived suggestion
 to have been asked or recommended verbatim; assess only its asserted factual premises and
 provenance here. Never excuse an unsupported premise because it uses tentative wording.
-{DOMAIN_EXAMPLES}
+{BOUNDARY_EXAMPLES}
 Return only JSON with the key "verdicts", containing exactly one object per claim, in
 order. Each object has "verdict" ('yes', 'no', or 'borderline') and "reason" (null for
 'yes', a specific explanation otherwise). The number of verdicts MUST equal the number
@@ -138,18 +135,18 @@ COVERAGE_STEPS = [
     POLICY,
     "Read Input for the evaluation criteria and the entire Retrieval Context before "
     "inspecting Actual Output. Distinguish transcript records from provided context. "
-    "Identify the meeting's most important market developments, macro observations, "
-    "attributed perspectives, material risks and qualifications, explicitly discussed "
-    "sales implications, and substantive questions including unanswered questions. "
-    "Importance follows emphasis and consequence for advisor/client conversations, "
-    "not mention counts. Context-only facts do not add meeting coverage requirements.",
-    "Compare those information items with Actual Output across substantive sections. "
-    "Faithful paraphrases and useful expansion of an executive takeaway later count. "
-    "Do not require repeated remarks, small talk, incidental details, absent product "
-    "opportunities, or a fixed quota of topics. Search Tags alone do not provide "
-    "substantive coverage; invented outreach ideas add no missing source information.",
+    "Identify the meeting's most important topics, decisions, conclusions, actions, "
+    "responsibilities, deadlines, risks, disagreements, qualifications, and unresolved "
+    "questions when present. Importance follows meeting emphasis and consequences for "
+    "understanding or acting on the discussion, not mention counts. Use any supplied "
+    "business context only to understand the audience and purpose; it cannot invent "
+    "meeting topics or factual support. Context-only facts add no meeting coverage requirements.",
+    "Compare those information items with Actual Output wherever their meaning appears. "
+    "Faithful paraphrases and useful elaboration count. Do not require repeated remarks, "
+    "small talk, incidental details, absent topics, or a fixed quota of information. "
+    "New suggestions cannot substitute for omitted source information.",
     "Judge coverage of meaning and essential qualifications. Distinguish missing "
-    "central themes from minor omitted details. A labeled suggested outreach idea "
+    "central themes from minor omitted details. A clearly distinguished derived idea "
     "need not have been explicitly proposed in the meeting, but its presence cannot "
     "substitute for the underlying insight. Preserve unanswered questions as unanswered. "
     "Do not otherwise score faithfulness, formatting, or writing style here.",
@@ -169,11 +166,13 @@ COVERAGE_RUBRIC = [
 
 CLARITY_STEPS = [
     POLICY,
-    "Evaluate readability for institutional sales professionals. Assess clear "
-    "language, logical organization, readable bullets, concise expression, and little "
-    "unnecessary repetition or unexplained jargon. An executive preview followed by "
-    "useful detail serves a distinct purpose and is not inherently redundant. Outreach "
-    "provenance labels should make discussed actions and generated ideas easy to distinguish.",
+    "Evaluate how easily a reader can understand the summary and use its information. "
+    "Use the intended audience and purpose in any supplied business context; otherwise "
+    "assume a reader seeking the meeting's main meaning. Assess clear language, logical "
+    "flow, concise expression, and unnecessary repetition or unexplained jargon. A brief "
+    "overview followed by useful detail is not inherently redundant. Source-derived "
+    "statements and newly suggested ideas should be easy to distinguish without "
+    "requiring any particular wording or layout.",
     "Score only clarity and conciseness. Do not score source support, topic coverage, "
     "exact headings, word counts, or section presence. Do not prefer brevity that removes "
     "necessary qualifications or essential attribution. Give specific editorial feedback.",

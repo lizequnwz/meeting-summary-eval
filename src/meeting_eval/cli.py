@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .evaluator import MeetingSummaryEvaluator
+from .metrics import AVAILABLE_METRICS, DEFAULT_METRICS
 
 
 def main(argv=None) -> int:
@@ -16,7 +17,8 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-concurrency", type=int, default=4)
-    parser.add_argument("--metrics", nargs="+", choices=["faithfulness", "coverage", "structure", "clarity"], default=["faithfulness", "coverage"])
+    parser.add_argument("--metrics", nargs="+", choices=AVAILABLE_METRICS, default=list(DEFAULT_METRICS))
+    parser.add_argument("--business-context", type=Path, help="Audience and purpose context; not a factual source")
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--max-retries", type=int, default=2)
@@ -24,7 +26,8 @@ def main(argv=None) -> int:
     try:
         with MeetingSummaryEvaluator(model=args.model, max_concurrency=args.max_concurrency,
                                      metrics=args.metrics, env_file=args.env_file, timeout=args.timeout,
-                                     max_retries=args.max_retries) as evaluator:
+                                     max_retries=args.max_retries,
+                                     business_context=args.business_context.read_text(encoding="utf-8-sig") if args.business_context else None) as evaluator:
             supplied_context = args.context.read_text(encoding="utf-8-sig") if args.context else None
             batch = evaluator.evaluate_batch(args.transcripts, args.summaries, args.output,
                                              context_dir=args.contexts, provided_context=supplied_context)

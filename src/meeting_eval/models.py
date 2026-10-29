@@ -16,7 +16,7 @@ class Evidence(BaseModel):
 class Finding(BaseModel):
     kind: Literal[
         "contradiction", "unsupported_claim", "missing_topic", "uncertainty",
-        "structure", "clarity", "institutional_attribution", "product_claim",
+        "clarity", "attribution",
         "material_distortion", "certainty_inflation",
     ]
     severity: Literal["high", "medium", "low"]
@@ -27,7 +27,6 @@ class Finding(BaseModel):
 
 
 class Diagnostics(BaseModel):
-    qa_present: bool | None
     findings: list[Finding]
 
 
