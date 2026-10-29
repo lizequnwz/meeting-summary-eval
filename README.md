@@ -1,29 +1,19 @@
 # Meeting summary evaluation
 
-A small Python package for evaluating Zoom AI meeting summaries against their full meeting transcripts. DeepEval produces separate **faithfulness** and **important-information coverage** scores. A structured diagnostic review adds source quotations, missing topics, unsupported claims, and material-risk flags.
+Evaluate Capital Markets meeting summaries for Fidelity Institutional sales professionals against the full transcript and optional explicitly supplied context. DeepEval produces separate **faithfulness** and **important-information coverage** scores. Structured diagnostics add quotations, material issues, and prompt improvement suggestions.
 
-The intended readers are Fidelity Institutional sales professionals and the people improving the Zoom summary prompt. Scores describe transcript-grounded summary quality; they do not verify market facts or approve client communications.
+The packaged [producer template v4.1](src/meeting_eval/prompts/summary-template-v4.1.md) defines the six-section contract. The evaluator uses methodology **2**. These replace the original four-section, explicit-discussion-only policy; old scores are not a comparable baseline.
 
 ## Install
 
-Python 3.11 or newer is required. From the project root:
+Python 3.11 or newer is required:
 
 ```bash
 python -m venv .venv
 .venv/bin/python -m pip install -e '.[dev,notebooks]'
 ```
 
-The core package does not require Pandas or Jupyter. Install with `pip install -e .` if you only need the Python API and CLI.
-
-Keep credentials in the existing `.env` file:
-
-```dotenv
-OPENAI_API_KEY=your-key
-# OPENAI_MODEL=gpt-6-luna
-# OPENAI_BASE_URL=https://your-openai-compatible-endpoint/v1
-```
-
-Existing process environment settings take precedence over `.env`. A constructor `model` value takes precedence over `OPENAI_MODEL`. The default model is `gpt-6-luna`, which is listed in the [official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna). Availability and structured-output support must also be provided by your endpoint. An unsupported model or endpoint produces an actionable error; the package does not silently choose a different model.
+Use `pip install -e .` for the API and CLI without notebook dependencies. Provide `OPENAI_API_KEY` through your environment or a local `.env`. Optional `OPENAI_MODEL` and `OPENAI_BASE_URL` select the model and endpoint. Process settings take precedence over `.env`; an explicit constructor model takes precedence over `OPENAI_MODEL`. The default is `gpt-6-luna`; your endpoint must provide that model and strict structured-output support. Credentials and source text should never be committed.
 
 ## Evaluate a meeting
 
@@ -31,55 +21,38 @@ Existing process environment settings take precedence over `.env`. A constructor
 from pathlib import Path
 from meeting_eval import MeetingSummaryEvaluator
 
-evaluator = MeetingSummaryEvaluator(model="gpt-6-luna", max_concurrency=4)
-result = evaluator.evaluate(
-    transcript=Path("examples/data/transcripts/meeting_001.txt").read_text(encoding="utf-8"),
-    summary=Path("examples/data/summaries/meeting_001.md").read_text(encoding="utf-8"),
-    meeting_id="meeting_001",
-)
+with MeetingSummaryEvaluator(max_concurrency=4) as evaluator:
+    result = evaluator.evaluate(
+        transcript=Path("examples/data/transcripts/meeting_001.txt").read_text(),
+        summary=Path("examples/data/summaries/meeting_001.md").read_text(),
+        meeting_id="meeting_001",
+    )
 
+print(result.execution_status, result.review_required)
 for name, metric in result.metrics.items():
     print(name, metric.score, metric.reason)
-print("Review required:", result.review_required)
 for finding in result.findings:
     print(finding.severity, finding.kind, finding.description)
 ```
 
-For an existing LangChain model, pass the instance directly:
+Pass `provided_context="..."` when the producer received an additional approved source, such as a glossary or participant context. Context is a separate source: its facts do not automatically become things said at the meeting. Missing context is not filled with outside knowledge. A [fictional context example](examples/data/contexts/meeting_001.md) demonstrates the distinction.
 
-```python
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from meeting_eval import MeetingSummaryEvaluator
-
-load_dotenv(".env", override=False)
-judge = ChatOpenAI(model="gpt-6-luna", timeout=120, max_retries=2)
-evaluator = MeetingSummaryEvaluator(model=judge, max_concurrency=4)
-```
-
-Avoid adding sampling parameters unless your model supports them. The adapter uses schema-based structured output. No web search, retrieval service, or reference summary is needed.
+You can pass a configured `ChatOpenAI` instance as `model`. The caller owns and must close that model's clients. Evaluator-owned models close with `with`, `close()`, or `await aclose()`. Notebooks use `await evaluator.aevaluate(...)` and `await evaluator.aevaluate_batch(...)`; use a fresh evaluator for unrelated event loops.
 
 ## Evaluate a batch
 
-Place `.txt` or `.md` inputs in two flat folders, using matching, case-sensitive file stems:
-
-```text
-data/transcripts/meeting_001.txt
-data/summaries/meeting_001.md
-```
+Use `.txt` or `.md` inputs in flat transcript and summary folders, paired by case-sensitive filename stem. Per-meeting context uses the same stem in a third folder.
 
 ```python
-batch = evaluator.evaluate_batch(
-    transcript_dir="examples/data/transcripts",
-    summary_dir="examples/data/summaries",
-    output_dir="results",
-)
+with MeetingSummaryEvaluator() as evaluator:
+    batch = evaluator.evaluate_batch(
+        transcript_dir="examples/data/transcripts",
+        summary_dir="examples/data/summaries",
+        output_dir="results",
+    )
 print(batch.output_dir)
 comparison = batch.to_dataframe()  # optional Pandas dependency
-print(comparison)
 ```
-
-The CLI runs the same workflow:
 
 ```bash
 .venv/bin/meeting-eval \
@@ -89,55 +62,54 @@ The CLI runs the same workflow:
   --max-concurrency 4
 ```
 
-Use `--max-concurrency 1` for sequential debugging. Run `meeting-eval --help` for model and metric options. Each run writes detailed JSON, a CSV comparison, and a standalone HTML report to the run directory printed by the command. The HTML report can be opened locally without a server.
+For shared context, add `--context path/to/context.md`. For per-meeting files, add `--contexts path/to/context-folder`. These are mutually exclusive, as are Python's `provided_context` and `context_dir` batch arguments. See `meeting-eval --help` for metrics and request limits.
 
-Missing partners, ambiguous duplicate stems, empty files, and evaluation errors are recorded against their meeting IDs. A problem with one meeting does not discard successful results from the others. Missing or failed scores remain empty rather than becoming zero.
+Each run creates a new directory containing `results.json`, `scores.csv`, and a standalone `report.html`. Missing partners, duplicates, empty inputs, read failures, and judge failures stay associated with meeting IDs. Successful meetings survive failures elsewhere. The CLI returns a nonzero status for incomplete execution, independently of summary-quality findings. Missing scores stay empty.
 
-When finished, call `evaluator.close()` in scripts or `await evaluator.aclose()` in notebooks. Scripts can also use `with MeetingSummaryEvaluator(...) as evaluator:`. Use a fresh evaluator when switching between synchronous execution and unrelated asynchronous event loops. A caller-supplied `ChatOpenAI` remains caller-owned.
+## Interpret results
 
-## Read the results
+- **Faithfulness, 0–1:** support for extracted claims, with ambiguity penalized. Clearly labeled outreach suggestions can be generated from supported premises; fabricated meeting statements, endorsements, products, promises, owners, or deadlines cannot.
+- **Coverage, 0–1:** a rubric judgment of whether consequential meeting information survives. It is not a percentage of transcript sentences. Context-only facts and search tags do not replace meeting coverage.
+- **Review flags:** material findings, unsupported or ambiguous claims, uncertain attribution, unverified quotations, and incomplete evaluation prioritize human inspection. A high score can still hide a severe error.
+- **Evidence:** `verified=True` means the exact quotation uniquely matches its indicated `transcript`, `context`, or `summary` source. It does not verify the judge's interpretation.
 
-- **Faithfulness, 0–1:** the proportion of extracted summary claims supported by the transcript, with ambiguous claims penalized. A high ratio can still hide one consequential error.
-- **Coverage, 0–1:** a rubric-based judgment of whether important meeting information survives summarization. It is not the fraction of transcript sentences retained.
-- **Review flags:** unsupported or ambiguous faithfulness claims, material diagnostic findings, uncertainty, missing or unverified quotations, and incomplete evaluation warrant human inspection independently of the scores. These are triage flags, not an acceptance gate.
-- **Evidence:** `verified=True` means the exact quoted text was uniquely located in the indicated source. Missing or repeated quotations remain unverified without assigned source lines. Verification does not establish that the judge interpreted the quote correctly.
+There is no composite score or automatic acceptance threshold. The transcript establishes what was said, not externally verified market truth. Preserve uncertainty and explicit corrections. The six sections are Executive Briefing; Economy & Market Updates; Advisor Outreach & Sales Actions; Market & Fidelity Perspectives; Questions and Answers; Search Tags. Distinguish `Discussed action:` from derived `Suggested outreach:`. Preserve attribution needed to avoid presenting a question or personal view as Fidelity's position.
 
-The default output has no weighted average or automatic pass/fail threshold. Sales implications must have been explicitly discussed; a plausible inference introduced by the summary is still unsupported under this project's policy. The transcript is the grounding source even when it contains transcription errors, which should produce an uncertainty finding.
+Enable optional checks with `metrics=("faithfulness", "coverage", "structure", "clarity")`. Structure checks the six-section format, bullet limits, Q&A format, and tags; clarity has its own rubric. [Methodology](docs/methodology.md) explains scoring boundaries and evidence limitations.
 
-Add optional checks with `metrics=("faithfulness", "coverage", "structure", "clarity")`. Structure checks the expected sections and executive bullet count; clarity uses a separate readability rubric. Q&A expectations depend on whether meaningful Q&A occurred in the transcript. These checks are optional because layout and style are secondary to accurate, useful content.
+## Prompt experiments and calibration
 
-See [the methodology](docs/methodology.md) for scoring rubrics, metric tradeoffs, evidence limitations, and diagnostic categories.
+The [single-meeting notebook](notebooks/01_single_meeting.ipynb) teaches individual metrics and the full evaluator; the [batch notebook](notebooks/02_batch_evaluation.ipynb) compares scores, findings, and exports. Both have **no saved outputs** and make billable requests when run. The single-meeting teaching path intentionally repeats metric calls. Start Jupyter with `.venv/bin/jupyter lab notebooks`.
 
-## Experiment in Jupyter
+The three bundled meetings are fictional: a faithful summary, important omissions, and material distortions. A separate [calibration manifest](calibration/fixtures.json) adds boundary cases for paraphrase, negation, units, attribution, generated outreach, context, unanswered Q&A, injection, and corrections. Expectations are draft test designs, **not human calibration labels**.
 
-```bash
-.venv/bin/jupyter lab notebooks
-```
-
-1. [Single meeting evaluation](notebooks/01_single_meeting.ipynb): load a pair, create `ChatOpenAI`, run individual DeepEval metrics, and inspect the package's evidence-rich result.
-2. [Batch evaluation and analysis](notebooks/02_batch_evaluation.ipynb): evaluate the examples concurrently, compare a Pandas table and score chart, inspect recurring findings, and export an analysis table.
-
-The notebooks use `await evaluator.aevaluate(...)` and `await evaluator.aevaluate_batch(...)` because Jupyter already runs an event loop. Use the synchronous methods in ordinary scripts. Both notebooks make real, billable API calls. The single-meeting notebook deliberately evaluates the two metrics individually and then repeats them through the complete evaluator for teaching purposes.
-
-All bundled meetings are explicitly fictional software fixtures. `meeting_001` is a faithful example, `meeting_002` deliberately omits the central themes, and `meeting_003` contains material distortions. Expect qualitative differences, not fixed scores: LLM judgments can vary.
-
-## Runtime and limitations
-
-- `max_concurrency` bounds in-flight judge requests across meetings and metric internals. The default is four; provider token-per-minute limits may require a lower value.
-- Request timeouts and bounded retries handle transient failures. Authentication, model access, unsupported parameters, and invalid inputs require correction rather than endless retries.
-- A default meeting evaluation requires approximately six judge requests before retries: claim/truth extraction, faithfulness judgments and reasoning, coverage, and structured diagnostics. Actual usage depends on the selected metrics and the installed DeepEval behavior. Full-transcript prompts dominate input-token usage.
-- The full transcript is retained. Oversized inputs fail clearly instead of being silently truncated or replaced by a generated synopsis. Chunking is deliberately outside the initial version.
-- Results stay in local files. DeepEval telemetry is disabled and automatic LangSmith tracing is suppressed for judge calls; no Confident AI evaluation upload is configured. Judge prompts are sent to your configured model endpoint. Reports may contain sensitive source quotations.
-- Human calibration is still needed. Review a representative set of good and flawed summaries before using score trends to make operational decisions; synthetic examples demonstrate mechanics rather than establish judge accuracy.
-
-## Validate and extend
+Check the manifest without model calls:
 
 ```bash
-.venv/bin/python -m pytest
+.venv/bin/python scripts/calibrate.py
 ```
 
-Tests use controlled judge responses so they do not spend API credits. Live validation should include a model/schema compatibility check and all three fictional pairs. Preserve real API errors separately from summary-quality findings.
+Choose repeated judge trials explicitly:
 
-See the [validation record](docs/validation.md) for the executed notebook results, observed judge variation, and remaining calibration work.
+```bash
+.venv/bin/python scripts/calibrate.py --run --model gpt-6-luna --trials 3
+```
 
-To change the judge, pass another configured `ChatOpenAI` instance. To change evaluation policy, edit the reusable metric rubrics and diagnostic instructions together, record the change in run metadata, and rerun a fixed human-reviewed comparison set. Keep model and rubric versions consistent when comparing runs.
+This saves detailed results, per-case variability, and a separate human annotation template. Errors remain execution failures, not low summary scores. See [calibration workflow](docs/calibration.md) for blind human review, adjudication, holdouts, and paired prompt comparisons.
+
+Compare saved producer-prompt runs with matching judges, policy, and meeting sources:
+
+```bash
+.venv/bin/meeting-eval-compare baseline/results.json candidate/results.json \
+  --output results/comparison-001
+```
+
+The comparison preserves paired score changes and material findings, excludes incomplete pairs from aggregate deltas, and rejects changed or insufficiently recorded evaluation conditions. Summaries may differ; transcripts and supplied context must match. Inspect material regressions even when a mean improves.
+
+## Runtime, privacy, and verification
+
+`max_concurrency` bounds judge requests, including calls within metrics. Token limits can require lower concurrency. Retries are bounded at the request layer; unsupported configuration requires correction. Full sources are retained; oversized inputs fail explicitly. A default evaluation normally makes about six judge requests before retries. Source length dominates cost. The offline suite and CI make no paid model calls.
+
+Reports stay local and may contain sensitive quotations. DeepEval telemetry is disabled and automatic LangSmith tracing is suppressed for judge calls. Sources are sent to your configured endpoint. Keep outputs under ignored `results/` and follow your organization's data-handling rules.
+
+Run `.venv/bin/python -m pytest` for offline checks. [Validation](docs/validation.md) distinguishes historical runs from the current methodology. Compare recorded prompt, policy, source, and judge provenance; inspect both improvements and regressions before changing a producer prompt.

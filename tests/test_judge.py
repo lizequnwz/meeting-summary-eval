@@ -39,9 +39,10 @@ def chat_model():
     chat.model_name = "offline-judge"
     chat.invoke.return_value = AIMessage(content="plain answer")
     chat.ainvoke = AsyncMock(return_value=AIMessage(content="plain answer"))
-    chat.with_structured_output.return_value.invoke.return_value = ExampleResponse(answer="typed")
+    structured = {"raw": AIMessage(content="typed"), "parsed": ExampleResponse(answer="typed"), "parsing_error": None}
+    chat.with_structured_output.return_value.invoke.return_value = structured
     chat.with_structured_output.return_value.ainvoke = AsyncMock(
-        return_value=ExampleResponse(answer="typed")
+        return_value=structured
     )
     return chat
 
@@ -56,7 +57,7 @@ def test_sync_and_async_schema_contract():
     assert asyncio.run(judge.a_generate("prompt")) == "plain answer"
     assert asyncio.run(judge.structured("prompt", ExampleResponse)) == ExampleResponse(answer="typed")
     chat.with_structured_output.assert_called_with(
-        ExampleResponse, method="json_schema", strict=True
+        ExampleResponse, method="json_schema", strict=True, include_raw=True
     )
     messages = chat.invoke.call_args.args[0]
     assert messages[0].type == "system"
@@ -106,7 +107,7 @@ def test_structured_diagnostics_share_metric_request_limit():
 
     async def structured(messages):
         await invoke(messages)
-        return ExampleResponse(answer=messages[-1].content)
+        return {"raw": AIMessage(content="typed"), "parsed": ExampleResponse(answer=messages[-1].content), "parsing_error": None}
 
     chat.ainvoke = invoke
     chat.with_structured_output.return_value.ainvoke = structured
@@ -164,20 +165,36 @@ def test_real_langchain_client_can_repeat_requests_on_one_runner():
         if first_loop is None:
             first_loop = loop
         assert loop is first_loop, "An async HTTP pool crossed event loops"
-        messages = json.loads(request.content)["messages"]
+        payload = json.loads(request.content)
+        messages = payload["messages"]
         assert messages[0]["role"] == "system"
         return httpx2.Response(200, json={
             "id": "offline-completion", "object": "chat.completion", "created": 0,
-            "model": "offline-model",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": "answer"}, "finish_reason": "stop"}],
+            "model": "resolved-offline-model",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+            "choices": [{"index": 0, "message": {"role": "assistant", "content":
+                '{"answer": "typed"}' if "response_format" in payload else "answer"}, "finish_reason": "stop"}],
         })
 
     client = DefaultAsyncHttpxClient(transport=httpx2.MockTransport(respond))
     model = ChatOpenAI(model="offline-model", api_key="offline-key", http_async_client=client)
     judge = LangChainJudge(model)
+
+    async def call(prompt, schema=None):
+        with judge.usage_scope() as usage:
+            result = await judge.a_generate(prompt, schema)
+        return result, usage
+
     with asyncio.Runner() as runner:
-        assert runner.run(judge.a_generate("first")) == "answer"
-        assert runner.run(judge.a_generate("second")) == "answer"
+        first, first_usage = runner.run(call("first"))
+        second, second_usage = runner.run(call("second"))
+        third, third_usage = runner.run(call("third", ExampleResponse))
+        assert first == second == "answer"
+        assert third == ExampleResponse(answer="typed")
+        for usage in (first_usage, second_usage, third_usage):
+            assert usage["request_count"] == 1
+            assert usage["total_tokens"] == 12
+            assert usage["response_models"] == ["resolved-offline-model"]
         runner.run(client.aclose())
 
 
@@ -217,3 +234,112 @@ def test_evaluator_reuses_async_client_loop_across_sync_calls():
     with pytest.raises(RuntimeError, match="closed"):
         evaluator.evaluate("Transcript", "Summary")
     asyncio.run(client.aclose())
+
+
+def usage_message(model="resolved-offline-model", input_tokens=11, output_tokens=3):
+    return AIMessage(content="private source text must not be retained",
+                     usage_metadata={"input_tokens": input_tokens, "output_tokens": output_tokens,
+                                     "total_tokens": input_tokens + output_tokens},
+                     response_metadata={"model_name": model, "private": "secret"})
+
+
+def test_usage_scope_tracks_structured_and_plain_calls_without_retaining_content():
+    import json
+
+    chat = chat_model()
+    chat.invoke.return_value = usage_message()
+    chat.with_structured_output.return_value.invoke.return_value = {
+        "raw": usage_message(), "parsed": ExampleResponse(answer="private parsed result"), "parsing_error": None,
+    }
+    judge = LangChainJudge(chat)
+    with judge.usage_scope() as usage:
+        with judge.stage("faithfulness"):
+            judge.generate("private prompt")
+        with judge.stage("diagnostics"):
+            judge.generate("private prompt", ExampleResponse)
+    assert usage["request_count"] == usage["successful_requests"] == 2
+    assert usage["failed_requests"] == 0
+    assert usage["input_tokens"] == 22
+    assert usage["output_tokens"] == 6
+    assert usage["total_tokens"] == 28
+    assert usage["response_models"] == ["resolved-offline-model"]
+    assert usage["stages"]["faithfulness"]["request_count"] == 1
+    assert usage["stages"]["diagnostics"]["total_tokens"] == 14
+    assert usage["elapsed_seconds"] >= 0
+    assert "private" not in json.dumps(usage)
+    assert "secret" not in json.dumps(usage)
+
+
+async def test_concurrent_meeting_scopes_are_isolated_and_child_calls_share_counters():
+    chat = chat_model()
+
+    async def invoke(messages):
+        await asyncio.sleep(0)
+        return usage_message(model=messages[-1].content)
+
+    chat.ainvoke = invoke
+    judge = LangChainJudge(chat, max_concurrency=2)
+
+    async def meeting(name, count):
+        with judge.usage_scope() as usage:
+            with judge.stage("faithfulness"):
+                await asyncio.gather(*(judge.a_generate(name) for _ in range(count)))
+        return usage
+
+    first, second = await asyncio.gather(meeting("one", 2), meeting("two", 3))
+    assert first["request_count"] == 2 and second["request_count"] == 3
+    assert first["response_models"] == ["one"]
+    assert second["response_models"] == ["two"]
+    assert first["input_tokens"] == 22 and second["input_tokens"] == 33
+    await judge.a_generate("outside-scope")
+    assert first["request_count"] == 2 and second["request_count"] == 3
+
+
+def test_unknown_usage_and_failures_are_not_reported_as_zero_token_cost():
+    chat = chat_model()
+    chat.invoke.side_effect = [usage_message(), TimeoutError("private request body"), AIMessage(content="answer")]
+    judge = LangChainJudge(chat)
+    with judge.usage_scope() as usage:
+        judge.generate("one")
+        with pytest.raises(TimeoutError):
+            judge.generate("two")
+        judge.generate("three")
+    assert usage["request_count"] == 3
+    assert usage["successful_requests"] == 2
+    assert usage["failed_requests"] == 1
+    assert usage["requests_with_token_usage"] == 1
+    assert usage["input_tokens"] is usage["output_tokens"] is usage["total_tokens"] is None
+    with judge.usage_scope() as empty:
+        pass
+    assert empty["request_count"] == 0 and empty["total_tokens"] is None
+
+
+@pytest.mark.parametrize("response", [
+    {"parsed": None, "parsing_error": None},
+    {"parsed": ExampleResponse(answer="answer"), "parsing_error": ValueError("private malformed output")},
+    {"parsed": {"answer": "unvalidated"}, "parsing_error": None},
+])
+def test_invalid_structured_responses_fail_and_preserve_available_usage(response):
+    chat = chat_model()
+    chat.with_structured_output.return_value.invoke.return_value = {"raw": usage_message(), **response}
+    judge = LangChainJudge(chat)
+    with judge.usage_scope() as usage:
+        with pytest.raises(ValueError, match="invalid structured"):
+            judge.generate("prompt", ExampleResponse)
+    assert usage["failed_requests"] == 1
+    assert usage["successful_requests"] == 0
+    assert usage["total_tokens"] == 14
+
+
+async def test_async_refusal_is_a_failed_invocation():
+    chat = chat_model()
+    raw = usage_message()
+    raw.additional_kwargs["refusal"] = "private refusal"
+    chat.with_structured_output.return_value.ainvoke.return_value = {
+        "raw": raw, "parsed": None, "parsing_error": None,
+    }
+    judge = LangChainJudge(chat)
+    with judge.usage_scope() as usage:
+        with pytest.raises(ValueError, match="refusal"):
+            await judge.structured("prompt", ExampleResponse)
+    assert usage["failed_requests"] == 1 and usage["total_tokens"] == 14

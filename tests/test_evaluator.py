@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,18 @@ from meeting_eval.models import Diagnostics, Evidence, Finding
 
 
 class FakeJudge:
+    model = "offline-judge"
+
+    @contextmanager
+    def usage_scope(self):
+        yield {"request_count": 0, "successful_requests": 0, "failed_requests": 0,
+               "requests_with_token_usage": 0, "input_tokens": None,
+               "output_tokens": None, "total_tokens": None, "elapsed_seconds": 0.0,
+               "response_models": [], "stages": {}}
+
+    def stage(self, name):
+        return nullcontext()
+
     async def aclose(self):
         pass
 
@@ -19,8 +32,10 @@ class FakeJudge:
 class FakeMetric:
     def __init__(self, name, fail=False):
         self.name, self.fail = name, fail
-        self.score, self.reason = 0.9, "Supported test assessment"
-        self.claims, self.verdicts = ["A source-supported claim"], []
+        self.score, self.reason = 1.0, "Supported test assessment"
+        self.truths = ["A source-supported claim"]
+        self.claims = ["A source-supported claim"]
+        self.verdicts = [{"verdict": "yes", "reason": None}]
 
     async def a_measure(self, case):
         if self.fail:
@@ -39,7 +54,7 @@ def test_sync_reuse_and_input_normalization(evaluator):
     first = evaluator.evaluate("\ufeffSpeaker: a claim.\r\n", "A claim.", "one")
     second = evaluator.evaluate("Speaker: another claim.", "Another claim.", "two")
     assert first.execution_status == second.execution_status == "completed"
-    assert first.metrics["faithfulness"].score == 0.9
+    assert first.metrics["faithfulness"].score == 1.0
     assert not first.review_required
     assert first.metadata["diagnostics_status"] == "completed"
     assert len(first.metadata["transcript_sha256"]) == 64
@@ -66,7 +81,7 @@ async def test_failed_metric_keeps_successes_and_hides_source(evaluator, monkeyp
     })
     result = await evaluator.aevaluate("source", "summary")
     assert result.execution_status == "partial"
-    assert result.metrics["faithfulness"].score == 0.9
+    assert result.metrics["faithfulness"].score == 1.0
     assert result.metrics["coverage"].score is None
     assert result.metrics["coverage"].status == "error"
     assert "Sensitive source" not in str(result.errors)
@@ -116,6 +131,7 @@ async def test_metric_negative_verdict_requires_review_even_if_diagnostics_clean
     def metrics(judge, names):
         metric = FakeMetric("faithfulness")
         metric.verdicts = [{"verdict": "borderline", "reason": "Support unclear"}]
+        metric.score = 0.0
         return {"faithfulness": metric}
     monkeypatch.setattr(engine, "create_metrics", metrics)
     result = await evaluator.aevaluate("source", "summary")
@@ -142,12 +158,12 @@ async def test_batch_pairing_stable_order_and_reports(evaluator, tmp_path):
 async def test_batch_meeting_concurrency_is_bounded(evaluator, tmp_path, monkeypatch):
     active = peak = 0
     original = evaluator.aevaluate
-    async def measured(*args):
+    async def measured(*args, **kwargs):
         nonlocal active, peak
         active += 1
         peak = max(peak, active)
         await asyncio.sleep(0.01)
-        result = await original(*args)
+        result = await original(*args, **kwargs)
         active -= 1
         return result
     monkeypatch.setattr(evaluator, "aevaluate", measured)
@@ -188,10 +204,10 @@ def test_validation():
 
 async def test_unexpected_pair_failure_does_not_discard_batch(evaluator, tmp_path, monkeypatch):
     original = evaluator.aevaluate
-    async def flaky(transcript, summary, meeting_id):
+    async def flaky(transcript, summary, meeting_id, **kwargs):
         if meeting_id == "bad":
             raise RuntimeError("unexpected bug")
-        return await original(transcript, summary, meeting_id)
+        return await original(transcript, summary, meeting_id, **kwargs)
     monkeypatch.setattr(evaluator, "aevaluate", flaky)
     for directory in ("t", "s"):
         (tmp_path / directory).mkdir()
@@ -207,3 +223,55 @@ async def test_async_methods_reject_closed_evaluator(evaluator, tmp_path):
         await evaluator.aevaluate("source", "summary")
     with pytest.raises(RuntimeError, match="closed"):
         await evaluator.aevaluate_batch(tmp_path, tmp_path)
+
+
+async def test_response_format_configuration_error_stops_entire_batch(evaluator, tmp_path, monkeypatch):
+    import httpx2
+    from openai import BadRequestError
+
+    calls = []
+    class Unsupported(FakeMetric):
+        async def a_measure(self, case):
+            calls.append(self.name)
+            raise BadRequestError("Sensitive source must stay out of reports", response=httpx2.Response(
+                400, request=httpx2.Request("POST", "https://example.invalid")),
+                body={"type": "invalid_request_error", "param": "response_format", "code": None})
+    monkeypatch.setattr(engine, "create_metrics", lambda judge, names: {n: Unsupported(n) for n in names})
+    evaluator.max_concurrency = 1
+    for directory in ("t", "s"):
+        (tmp_path / directory).mkdir()
+        for index in range(3):
+            (tmp_path / directory / f"{index}.txt").write_text("Source")
+    batch = await evaluator.aevaluate_batch(tmp_path / "t", tmp_path / "s")
+    assert calls == ["faithfulness"]
+    assert all(result.execution_status == "error" for result in batch.results)
+    assert "Sensitive source" not in batch.model_dump_json()
+
+
+def test_context_limit_error_remains_meeting_specific():
+    import httpx2
+    from openai import BadRequestError
+
+    error = BadRequestError("Context too long", response=httpx2.Response(
+        400, request=httpx2.Request("POST", "https://example.invalid")),
+        body={"type": "invalid_request_error", "param": "messages", "code": "context_length_exceeded"})
+    assert not engine._global_error(error)
+
+
+async def test_async_context_manager_closes_evaluator(evaluator):
+    async with evaluator:
+        result = await evaluator.aevaluate("Source", "Summary")
+        assert result.execution_status == "completed"
+    with pytest.raises(RuntimeError, match="closed"):
+        await evaluator.aevaluate("Source", "Summary")
+
+
+async def test_uncertain_qa_presence_remains_a_review_flag(evaluator):
+    class Uncertain(FakeJudge):
+        async def structured(self, *args):
+            return Diagnostics(qa_present=None, findings=[])
+    evaluator._judge = Uncertain()
+    result = await evaluator.aevaluate("Source", "Summary")
+    assert result.execution_status == "completed"
+    assert result.review_required
+    assert any("Q&A" in reason for reason in result.review_reasons)

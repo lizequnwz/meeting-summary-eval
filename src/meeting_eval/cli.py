@@ -10,6 +10,9 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate transcript/summary pairs with DeepEval.")
     parser.add_argument("--transcripts", required=True, type=Path)
     parser.add_argument("--summaries", required=True, type=Path)
+    context = parser.add_mutually_exclusive_group()
+    context.add_argument("--context", type=Path, help="UTF-8 context supplied to every meeting")
+    context.add_argument("--contexts", type=Path, help="Optional context files matched by meeting stem")
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--model", default=None)
     parser.add_argument("--max-concurrency", type=int, default=4)
@@ -22,7 +25,9 @@ def main(argv=None) -> int:
         with MeetingSummaryEvaluator(model=args.model, max_concurrency=args.max_concurrency,
                                      metrics=args.metrics, env_file=args.env_file, timeout=args.timeout,
                                      max_retries=args.max_retries) as evaluator:
-            batch = evaluator.evaluate_batch(args.transcripts, args.summaries, args.output)
+            supplied_context = args.context.read_text(encoding="utf-8-sig") if args.context else None
+            batch = evaluator.evaluate_batch(args.transcripts, args.summaries, args.output,
+                                             context_dir=args.contexts, provided_context=supplied_context)
     except (ValueError, OSError) as exc:
         parser.exit(2, f"Input/output error: {exc}\n")
     counts = {status: sum(r.execution_status == status for r in batch.results)

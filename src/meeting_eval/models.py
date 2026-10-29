@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class Evidence(BaseModel):
-    source: Literal["transcript", "summary"]
+    source: Literal["transcript", "context", "summary"]
     quote: str
     line_start: int | None = None
     line_end: int | None = None

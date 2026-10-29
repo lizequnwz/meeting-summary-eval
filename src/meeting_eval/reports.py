@@ -37,6 +37,10 @@ def score_rows(results: list[MeetingResult]) -> list[dict[str, Any]]:
             "high_severity_findings": sum(f.severity == "high" for f in result.findings),
             "finding_count": len(result.findings),
             "errors": "; ".join(result.errors),
+            "request_count": result.metadata.get("usage", {}).get("request_count"),
+            "input_tokens": result.metadata.get("usage", {}).get("input_tokens"),
+            "output_tokens": result.metadata.get("usage", {}).get("output_tokens"),
+            "elapsed_seconds": result.metadata.get("elapsed_seconds"),
         }
         for name in metric_names:
             metric = result.metrics.get(name)
@@ -86,6 +90,12 @@ def aggregate_results(results: list[MeetingResult]) -> dict[str, Any]:
             "meeting_fraction": affected / len(assessed) if assessed else None,
             "denominator_type": "completed_structure_metrics" if kind == "structure" else "completed_diagnostics",
         }
+    usage = [r.metadata["usage"] for r in results if "usage" in r.metadata]
+    requests = sum(item["request_count"] for item in usage)
+    usage_complete = bool(requests) and all(
+        not item["request_count"] or item.get("requests_with_token_usage") == item["request_count"]
+        for item in usage
+    )
     return {
         "meeting_count": len(results),
         "execution_status_counts": dict(sorted(Counter(r.execution_status for r in results).items())),
@@ -96,6 +106,15 @@ def aggregate_results(results: list[MeetingResult]) -> dict[str, Any]:
         "diagnostics_status_counts": dict(sorted(Counter(r.metadata.get("diagnostics_status", "unknown") for r in results).items())),
         "metrics": metric_stats,
         "issue_categories": issues,
+        "usage": {
+            "request_count": requests,
+            "successful_requests": sum(item["successful_requests"] for item in usage),
+            "failed_requests": sum(item["failed_requests"] for item in usage),
+            "requests_with_token_usage": sum(item.get("requests_with_token_usage", 0) for item in usage),
+            "input_tokens": sum(item.get("input_tokens") or 0 for item in usage) if usage_complete else None,
+            "output_tokens": sum(item.get("output_tokens") or 0 for item in usage) if usage_complete else None,
+            "total_tokens": sum(item.get("total_tokens") or 0 for item in usage) if usage_complete else None,
+        },
         "issue_denominator_description": "Issue rates use only meetings with completed structured diagnostics. Structure issues use completed structure metrics. Failed, skipped, and unknown diagnostic states are excluded; finding counts include all returned findings.",
     }
 
@@ -107,6 +126,17 @@ def _csv_cell(value: Any) -> Any:
     if isinstance(value, str) and value.startswith(("\t", "\r", "\n")):
         return "'" + value
     return value
+
+
+def write_csv(rows: list[dict[str, Any]], path: str | Path, *, fieldnames: list[str] | None = None) -> Path:
+    """Export local analysis tables using the same formula protection as reports."""
+    path = Path(path)
+    names = fieldnames if fieldnames is not None else list(dict.fromkeys(key for row in rows for key in row))
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=names)
+        writer.writerow({name: _csv_cell(name) for name in names})
+        writer.writerows({name: _csv_cell(row.get(name)) for name in names} for row in rows)
+    return path
 
 
 def _e(value: Any) -> str:
@@ -231,19 +261,24 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
         for kind, stats in aggregate["issue_categories"].items()
     ) or '<tr><td colspan="3" class="muted">No structured findings were returned.</td></tr>'
     statuses = " · ".join(f'{count} {_label(status).lower()}' for status, count in aggregate["execution_status_counts"].items()) or "No inputs"
-    problem_count = sum(aggregate["execution_status_counts"].get(status, 0) for status in ("invalid", "error"))
+    problem_count = sum(aggregate["execution_status_counts"].get(status, 0) for status in ("partial", "invalid", "error"))
+    usage = aggregate["usage"]
+    tokens = str(usage["total_tokens"]) if usage["total_tokens"] is not None else "Unavailable or incomplete"
+    provenance = _e(json.dumps(batch.metadata, indent=2, ensure_ascii=False, default=str))
     meetings = "".join(_meeting_html(result) for result in batch.results)
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meeting summary evaluation report</title><style>{_CSS}</style></head>
 <body><main>
 <header><p class="eyebrow">Fidelity Institutional · Evaluation</p><h1>Meeting summary quality,<br>with the evidence in view.</h1>
-<p class="subtitle">Transcript-grounded evaluations for Capital Markets meeting summaries. Compare dimensions separately, then inspect the findings that matter for advisor and client conversations.</p>
-<p class="run-id">Run {_e(batch.run_id)} · {_e(statuses)}</p></header>
+<p class="subtitle">Evaluations grounded in the meeting transcript and explicitly supplied context. Compare dimensions separately, then inspect the findings that matter for advisor and client conversations.</p>
+<p class="run-id">Run {_e(batch.run_id)} · {_e(statuses)}</p>
+<details class="metadata"><summary>Evaluation policy and judge configuration</summary><pre>{provenance}</pre></details></header>
 <section class="kpis" aria-label="Run overview">
 <div class="kpi"><strong>{aggregate["meeting_count"]}</strong><span>Input meetings</span></div>
 <div class="kpi"><strong>{aggregate["review_required_count"]}</strong><span>Require review</span></div>
 <div class="kpi"><strong>{aggregate["high_severity_finding_count"]}</strong><span>High severity findings</span></div>
 <div class="kpi"><strong>{problem_count}</strong><span>Invalid inputs or evaluation errors</span></div></section>
+<p class="note">Judge invocations: {usage["request_count"]} · Failed invocations: {usage["failed_requests"]} · Provider-reported tokens: {_e(tokens)}. Invocation counts exclude HTTP retries inside the SDK; incomplete usage remains unknown.</p>
 <section class="panel"><h2>Scores across meetings</h2><div class="table-wrap"><table><thead><tr><th>Dimension</th><th>Valid / input meetings</th><th>Mean</th><th>Median</th><th>Range</th></tr></thead><tbody>{metric_rows}</tbody></table></div>
 <p class="note">Scores range from 0 to 1; higher is better. Means and medians include only completed metrics with a valid score. Missing, failed, and inapplicable evaluations remain missing. These are evaluation scores, not probabilities of correctness. No weighted overall score is calculated.</p>{comparison}</section>
 <section class="panel"><h2>Recurring issues</h2><div class="table-wrap"><table><thead><tr><th>Issue category</th><th>Meetings affected / assessed</th><th>Findings</th></tr></thead><tbody>{issue_rows}</tbody></table></div>
@@ -251,8 +286,8 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
 <section aria-labelledby="meeting-heading"><h2 id="meeting-heading">Inspect each meeting</h2><div class="toolbar"><input id="meeting-search" type="search" placeholder="Find a meeting ID" aria-label="Find a meeting ID"><label><input id="review-only" type="checkbox">Only meetings requiring review</label><button id="expand-all" type="button">Expand visible meetings</button></div>
 <p id="filter-empty" class="muted" hidden>No meetings match this filter.</p>{meetings or '<p class="muted">No meeting results are available.</p>'}</section>
 <section class="panel" style="margin-top:28px"><h2>Reading this report</h2><div class="legend"><p><strong>Execution status.</strong> Completed means the requested evaluation ran; it does not mean the summary passed. Partial means some requested work failed. Invalid means the input could not be evaluated. Error means evaluation failed.</p>
-<p><strong>Evidence and judgment.</strong> Quote verification checks that cited text occurs in the source; it does not prove the judge interpreted it correctly. Unsupported claims and ambiguous transcript passages require human judgment. A review flag does not constitute a confirmed financial or policy finding.</p></div></section>
-<p class="footer">The meeting transcript is the source for this evaluation and can itself contain transcription errors. Review consequential claims and Fidelity view attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
+<p><strong>Evidence and judgment.</strong> Quote verification checks that cited text occurs in the transcript, supplied context, or summary; it does not prove the judge interpreted it correctly. Labeled suggested outreach is assessed separately from claims that a meeting recommendation was made. Unsupported claims and ambiguous passages require human judgment. A review flag does not constitute a confirmed financial or policy finding.</p></div></section>
+<p class="footer">The transcript establishes what was said and can contain transcription errors. Supplied context remains a separate source. Review consequential claims and Fidelity view attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
 </main><script>
 const search=document.getElementById('meeting-search');
 const review=document.getElementById('review-only');
@@ -282,9 +317,6 @@ def write_reports(batch: BatchResult, output_dir: str | Path) -> Path:
     (run_dir / "results.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
     rows = score_rows(batch.results)
     fieldnames = list(rows[0]) if rows else ["meeting_id", "execution_status", "review_required", "diagnostics_status", "review_reasons", "high_severity_findings", "finding_count", "errors"]
-    with (run_dir / "scores.csv").open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writerow({name: _csv_cell(name) for name in fieldnames})
-        writer.writerows({name: _csv_cell(value) for name, value in row.items()} for row in rows)
+    write_csv(rows, run_dir / "scores.csv", fieldnames=fieldnames)
     (run_dir / "report.html").write_text(_report_html(batch, aggregate), encoding="utf-8")
     return run_dir

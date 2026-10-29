@@ -4,7 +4,7 @@ import json
 import pytest
 
 from meeting_eval.models import BatchResult, Evidence, Finding, MeetingResult, MetricResult
-from meeting_eval.reports import aggregate_results, score_rows, write_reports
+from meeting_eval.reports import aggregate_results, score_rows, write_reports, write_csv
 
 
 def test_aggregate_excludes_missing_and_failed_scores():
@@ -113,3 +113,31 @@ def test_empty_batch_has_valid_reports_without_zero_scores(tmp_path):
     assert "No metrics were run" in (output / "report.html").read_text()
     with (output / "scores.csv").open(newline="") as file:
         assert list(csv.DictReader(file)) == []
+
+
+def test_report_counts_partial_diagnostic_failures_as_evaluation_errors(tmp_path):
+    result = MeetingResult(meeting_id="partial", execution_status="partial", review_required=True,
+        metrics={"faithfulness": MetricResult(name="faithfulness", score=1)},
+        errors=["diagnostics: timeout"], metadata={"diagnostics_status": "error"})
+    run = write_reports(BatchResult(run_id="partial", results=[result]), tmp_path)
+    report = (run / "report.html").read_text()
+    assert '<strong>1</strong><span>Invalid inputs or evaluation errors</span>' in report
+
+
+def test_analysis_csv_exports_use_formula_protection_and_all_columns(tmp_path):
+    path = write_csv([{"meeting_id": "=formula", "description": "+unsafe"},
+                      {"meeting_id": "safe", "extra": "@formula"}], tmp_path / "table.csv")
+    with path.open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert rows[0]["meeting_id"] == "'=formula"
+    assert rows[0]["description"] == "'+unsafe"
+    assert rows[1]["extra"] == "'@formula"
+
+
+def test_unknown_token_usage_does_not_become_zero():
+    results = [MeetingResult(meeting_id="one", metadata={"usage": {
+        "request_count": 2, "successful_requests": 1, "failed_requests": 1,
+        "requests_with_token_usage": 1, "input_tokens": None, "output_tokens": None, "total_tokens": None}})]
+    usage = aggregate_results(results)["usage"]
+    assert usage["request_count"] == 2
+    assert usage["total_tokens"] is None
