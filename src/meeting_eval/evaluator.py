@@ -14,12 +14,12 @@ from langchain_openai import ChatOpenAI
 from openai import AuthenticationError, BadRequestError, NotFoundError, PermissionDeniedError
 
 from .config import prepare_environment
-from .diagnostics import BUSINESS_INSTRUCTIONS, check_structure, diagnostic_prompt, evidence_complete, verify_evidence
+from .diagnostics import check_structure, diagnostic_prompt, evidence_complete, verify_evidence
 from .inputs import discover_pairs, normalize_text
 from .judge import LangChainJudge
 from .metrics import create_metrics
 from .models import BatchResult, Diagnostics, MeetingResult, MetricResult
-from .policy import METHODOLOGY_VERSION, PRODUCER_PROMPT, TEMPLATE_VERSION
+from .policy import METHODOLOGY_VERSION, POLICY
 from .provenance import runtime_metadata
 
 
@@ -104,8 +104,6 @@ class MeetingSummaryEvaluator:
         return {**runtime_metadata(model, timeout=self.timeout, max_retries=self.max_retries),
                 "metrics": list(self.metric_names),
                 "methodology_version": METHODOLOGY_VERSION,
-                "producer_template_version": TEMPLATE_VERSION,
-                "producer_prompt_sha256": hashlib.sha256(PRODUCER_PROMPT.encode()).hexdigest(),
                 "sales_policy": "grounded_facts_labeled_derived_outreach",
                 "scoring": "separate_scores_no_acceptance_gate", "max_concurrency": self.max_concurrency,
                 "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -197,7 +195,7 @@ class MeetingSummaryEvaluator:
         sources = [{"source": "transcript", "text": transcript}]
         if provided_context is not None:
             sources.append({"source": "context", "text": provided_context})
-        test_case = LLMTestCase(input=BUSINESS_INSTRUCTIONS, actual_output=summary,
+        test_case = LLMTestCase(input=POLICY, actual_output=summary,
                                retrieval_context=[json.dumps(source, ensure_ascii=False) for source in sources])
         try:
             judge = self.judge

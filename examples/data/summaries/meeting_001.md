@@ -1,7 +1,7 @@
 FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
 
 ## Executive Briefing
-- Inflation eased from 3.4% to 3.2%, but moderation remained uneven; the fictional Fidelity presenter offered no rate-cut date forecast.
+- Inflation eased from 3.4% to 3.2%, but moderation remained uneven; the fictional institutional presenter offered no rate-cut date forecast.
 - Short-term yields fell 10 basis points while longer-term yields were roughly unchanged; higher yield does not eliminate price risk.
 
 ## Economy & Market Updates
@@ -12,8 +12,8 @@ FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
 - Discussed action: Ask advisors about investment horizon, tolerance for interest-rate volatility, and near-term liquidity needs.
 - Suggested outreach: Ask how a client's near-term cash needs affect their comfort with interest-rate volatility.
 
-## Market & Fidelity Perspectives
-- The fictional Fidelity presenter described disinflation as uneven and policy as dependent on incoming data; no rate-cut date was forecast.
+## Market & Institutional Perspectives
+- The fictional institutional presenter described disinflation as uneven and policy as dependent on incoming data; no rate-cut date was forecast.
 - The discussion balanced income opportunities with duration risk without recommending that every client lengthen duration.
 - No specific fund, launch, or performance promise was discussed.
 

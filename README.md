@@ -1,15 +1,15 @@
 # Meeting summary evaluation
 
-Evaluate Capital Markets meeting summaries for Fidelity Institutional sales professionals against the full transcript and optional explicitly supplied context. DeepEval produces separate **faithfulness** and **important-information coverage** scores. Structured diagnostics add quotations, material issues, and prompt improvement suggestions.
+Evaluate capital markets meeting summaries for sales professionals against the full transcript and optional explicitly supplied context. DeepEval produces separate **faithfulness** and **important-information coverage** scores. Structured diagnostics add quotations, material issues, and prompt improvement suggestions.
 
-The packaged [producer template v4.1](src/meeting_eval/prompts/summary-template-v4.1.md) defines the six-section contract. The evaluator uses methodology **2**. These replace the original four-section, explicit-discussion-only policy; old scores are not a comparable baseline.
+The evaluator uses methodology **3**, with source-grounded scoring and optional six-section format checks defined in the [evaluation policy](src/meeting_eval/policy.py). Supply an existing summary to evaluate.
 
 **New to evaluation?** Start with the [learning guide](docs/learning-guide.md) and
 [notebook learning path](notebooks/README.md). The foundations, DeepEval lab, and prompt
 workbench run offline. They explain the methodology, show where to edit prompts, and
 demonstrate why DeepEval does **not** require a question list for every metric.
 
-Review the current prompts without model calls with `meeting-eval-prompts --show producer`,
+Review the current prompts without model calls with `meeting-eval-prompts --show policy`,
 or export a review bundle with `meeting-eval-prompts --output results/prompt-review-001`.
 
 ## Install
@@ -81,7 +81,7 @@ Each run creates a new directory containing `results.json`, `scores.csv`, and a 
 - **Review flags:** material findings, unsupported or ambiguous claims, uncertain attribution, unverified quotations, and incomplete evaluation prioritize human inspection. A high score can still hide a severe error.
 - **Evidence:** `verified=True` means the exact quotation uniquely matches its indicated `transcript`, `context`, or `summary` source. It does not verify the judge's interpretation.
 
-There is no composite score or automatic acceptance threshold. The transcript establishes what was said, not externally verified market truth. Preserve uncertainty and explicit corrections. The six sections are Executive Briefing; Economy & Market Updates; Advisor Outreach & Sales Actions; Market & Fidelity Perspectives; Questions and Answers; Search Tags. Distinguish `Discussed action:` from derived `Suggested outreach:`. Preserve attribution needed to avoid presenting a question or personal view as Fidelity's position.
+There is no composite score or automatic acceptance threshold. The transcript establishes what was said, not externally verified market truth. Preserve uncertainty and explicit corrections. The six sections are Executive Briefing; Economy & Market Updates; Advisor Outreach & Sales Actions; Market & Institutional Perspectives; Questions and Answers; Search Tags. Distinguish `Discussed action:` from derived `Suggested outreach:`. Preserve attribution needed to avoid presenting a question or personal view as an institution's position.
 
 Enable optional checks with `metrics=("faithfulness", "coverage", "structure", "clarity")`. Structure checks the six-section format, bullet limits, Q&A format, and tags; clarity has its own rubric. [Methodology](docs/methodology.md) explains scoring boundaries and evidence limitations.
 
@@ -105,7 +105,7 @@ Choose repeated judge trials explicitly:
 
 This saves detailed results, per-case variability, and a separate human annotation template. Errors remain execution failures, not low summary scores. See [calibration workflow](docs/calibration.md) for blind human review, adjudication, holdouts, and paired prompt comparisons.
 
-Compare saved producer-prompt runs with matching judges, policy, and meeting sources:
+Compare saved baseline and candidate evaluations with matching judges, policy, and meeting sources:
 
 ```bash
 .venv/bin/meeting-eval-compare baseline/results.json candidate/results.json \

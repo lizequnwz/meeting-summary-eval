@@ -94,10 +94,10 @@ def test_extraction_data_is_json_encoded_and_not_interpolated_as_template_markup
     assert "do not rewrite the suggestion as a claim that the meeting recommended it" in " ".join(prompt.split())
 
 
-def test_policy_fingerprint_includes_the_packaged_producer_prompt(monkeypatch):
+def test_policy_fingerprint_includes_the_evaluation_criteria(monkeypatch):
     original = policy.policy_fingerprint()
     assert len(original) == 64
     assert original == policy.policy_fingerprint()
-    assert all(heading in policy.PRODUCER_PROMPT for heading in policy.HEADINGS)
-    monkeypatch.setattr(policy, "PRODUCER_PROMPT", policy.PRODUCER_PROMPT + "\nChanged contract.")
+    assert all(heading in policy.POLICY for heading in policy.HEADINGS)
+    monkeypatch.setattr(policy, "POLICY", policy.POLICY + "\nChanged criteria.")
     assert policy.policy_fingerprint() != original

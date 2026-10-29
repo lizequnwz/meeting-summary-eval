@@ -27,7 +27,7 @@ SUMMARY = """# Executive Briefing
 - Inflation: A supported development.
 ## Advisor Outreach & Sales Actions
 - Suggested outreach: Explore the supported development with advisors.
-## Market & Fidelity Perspectives
+## Market & Institutional Perspectives
 - Presenter: A qualified perspective.
 ## Questions and Answers
 No substantive Q&A occurred.

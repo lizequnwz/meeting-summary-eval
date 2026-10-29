@@ -10,7 +10,7 @@ FICTIONAL SOFTWARE TEST SCENARIO — this summary intentionally omits central th
 ## Advisor Outreach & Sales Actions
 No supported items.
 
-## Market & Fidelity Perspectives
+## Market & Institutional Perspectives
 - The presenter did not forecast next week's equity return.
 
 ## Questions and Answers

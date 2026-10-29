@@ -35,7 +35,7 @@ async def test_offline_provider_to_reports_and_paired_comparison(tmp_path):
 - Rates are unchanged.
 ## Advisor Outreach & Sales Actions
 - Suggested outreach: Explore whether unchanged rates affect advisor conversations.
-## Market & Fidelity Perspectives
+## Market & Institutional Perspectives
 - The supplied context says RIC may mean Regional Investment Consultant for {identifier}.
 ## Questions and Answers
 No substantive Q&A occurred.
@@ -94,7 +94,7 @@ Interest Rates, Advisor Conversations
                 result = {"qa_present": False, "findings": [{
                     "kind": "uncertainty", "severity": "medium",
                     "description": "The supplied role expansion is explicitly tentative.",
-                    "section": "Market & Fidelity Perspectives", "suggested_prompt_change": None,
+                    "section": "Market & Institutional Perspectives", "suggested_prompt_change": None,
                     "evidence": [{"source": "context", "quote": context_quotes[meeting_id],
                                   "line_start": None, "line_end": None, "verified": False}],
                 }]}

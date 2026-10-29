@@ -269,7 +269,7 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meeting summary evaluation report</title><style>{_CSS}</style></head>
 <body><main>
-<header><p class="eyebrow">Fidelity Institutional · Evaluation</p><h1>Meeting summary quality,<br>with the evidence in view.</h1>
+<header><p class="eyebrow">Meeting Summary Evaluation</p><h1>Meeting summary quality,<br>with the evidence in view.</h1>
 <p class="subtitle">Evaluations grounded in the meeting transcript and explicitly supplied context. Compare dimensions separately, then inspect the findings that matter for advisor and client conversations.</p>
 <p class="run-id">Run {_e(batch.run_id)} · {_e(statuses)}</p>
 <details class="metadata"><summary>Evaluation policy and judge configuration</summary><pre>{provenance}</pre></details></header>
@@ -287,7 +287,7 @@ def _report_html(batch: BatchResult, aggregate: dict[str, Any]) -> str:
 <p id="filter-empty" class="muted" hidden>No meetings match this filter.</p>{meetings or '<p class="muted">No meeting results are available.</p>'}</section>
 <section class="panel" style="margin-top:28px"><h2>Reading this report</h2><div class="legend"><p><strong>Execution status.</strong> Completed means the requested evaluation ran; it does not mean the summary passed. Partial means some requested work failed. Invalid means the input could not be evaluated. Error means evaluation failed.</p>
 <p><strong>Evidence and judgment.</strong> Quote verification checks that cited text occurs in the transcript, supplied context, or summary; it does not prove the judge interpreted it correctly. Labeled suggested outreach is assessed separately from claims that a meeting recommendation was made. Unsupported claims and ambiguous passages require human judgment. A review flag does not constitute a confirmed financial or policy finding.</p></div></section>
-<p class="footer">The transcript establishes what was said and can contain transcription errors. Supplied context remains a separate source. Review consequential claims and Fidelity view attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
+<p class="footer">The transcript establishes what was said and can contain transcription errors. Supplied context remains a separate source. Review consequential claims and institutional view attribution against the cited passages. Detailed results and flat scores are saved beside this report as results.json and scores.csv.</p>
 </main><script>
 const search=document.getElementById('meeting-search');
 const review=document.getElementById('review-only');

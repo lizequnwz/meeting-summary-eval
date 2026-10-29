@@ -1,10 +1,8 @@
-# Evaluation methodology 2
+# Evaluation methodology 3
 
 ## Contract and source boundaries
 
-The evaluator measures whether a Capital Markets summary serves Fidelity Institutional sales professionals while preserving source meaning. The [producer template v4.1](../src/meeting_eval/prompts/summary-template-v4.1.md) is supplied to scoring. It requires Executive Briefing; Economy & Market Updates; Advisor Outreach & Sales Actions; Market & Fidelity Perspectives; Questions and Answers; Search Tags.
-
-The original photographed template's Q&A continuation was unavailable. Version 4.1 reconstructs absent and unanswered Q&A behavior explicitly; it does not claim verbatim fidelity to missing text. The versioned prompt is the current contract.
+The evaluator measures whether a capital markets summary serves sales professionals while preserving source meaning. The [evaluation policy](../src/meeting_eval/policy.py) defines source boundaries and the optional format checks: Executive Briefing; Economy & Market Updates; Advisor Outreach & Sales Actions; Market & Institutional Perspectives; Questions and Answers; Search Tags. Supply an existing summary for evaluation.
 
 The transcript establishes what was said, including speaker roles, uncertainty, and explicit corrections. Optional supplied context supports additional facts when explicitly provided to the producer. A context-only fact is not evidence that a speaker discussed it. Neither source authorizes repairs using external market knowledge. Ambiguous or corrupted material requires uncertainty.
 
@@ -27,7 +25,7 @@ A suggestion must not turn a tentative outlook into an endorsed recommendation. 
 
 **Question:** Does consequential meeting information survive at useful compression?
 
-A fixed-step DeepEval `GEval` reads producer requirements, sources, and summary. It prioritizes central market and macro developments, significant figures/timeframes, Fidelity perspectives and qualifications, advisor implications, and substantive Q&A. Small talk, repetition, incidental details, and topics never discussed create no coverage requirement. Context-only facts create no requirement to insert them into the meeting account. Tags cannot replace explanatory coverage.
+A fixed-step DeepEval `GEval` reads evaluation criteria, sources, and summary. It prioritizes central market and macro developments, significant figures/timeframes, institutional perspectives and qualifications, advisor implications, and substantive Q&A. Small talk, repetition, incidental details, and topics never discussed create no coverage requirement. Context-only facts create no requirement to insert them into the meeting account. Tags cannot replace explanatory coverage.
 
 | Raw score | Meaning |
 | --- | --- |
@@ -41,9 +39,9 @@ Normalize the emitted score by ten. The adapter supplies no token log probabilit
 
 ## Structure and clarity
 
-Both are optional; the default remains faithfulness plus coverage. Structure evaluates exact headings and the producer's format limits. Executive Briefing allows one to three bullets, no more than 30 words each; prefer two or three only when supported. If there are no substantive takeaways, use `No supported items.` instead of inventing a bullet. Economy and Outreach permit at most four bullets each, one or two sentences per bullet. Perspectives permits at most five. Use `No supported items.` when sections 2–4 have no supported items. Tags are a single comma-separated line of unique Title Case topics, at most ten; do not invent tags to reach a minimum. Semantic support remains the judge's responsibility.
+Both are optional; the default remains faithfulness plus coverage. Structure evaluates exact headings and the format limits in the evaluation policy. Executive Briefing allows one to three bullets, no more than 30 words each; prefer two or three only when supported. If there are no substantive takeaways, use `No supported items.` instead of inventing a bullet. Economy and Outreach permit at most four bullets each, one or two sentences per bullet. Perspectives permits at most five. Use `No supported items.` when sections 2–4 have no supported items. Tags are a single comma-separated line of unique Title Case topics, at most ten; do not invent tags to reach a minimum. Semantic support remains the judge's responsibility.
 
-Substantive questions may occur outside a formal Q&A segment. Preserve actual answers and state `No answer was provided.` for unanswered questions. When no substantive questions occurred, use `No substantive Q&A occurred.` These are explicit v4.1 reconstruction rules. Uncertain applicability remains visible rather than silently manufacturing an answer.
+Substantive questions may occur outside a formal Q&A segment. Preserve actual answers and state `No answer was provided.` for unanswered questions. When no substantive questions occurred, use `No substantive Q&A occurred.` Uncertain applicability remains visible rather than silently manufacturing an answer.
 
 Clarity uses its own rubric: raw 0–2 for severely unusable prose, 3–5 for substantial ambiguity/repetition, 6–7 for usable writing needing editing, 8–9 for clear writing with small issues, and 10 for exceptionally readable, economical organization. It does not reward omitting necessary qualifications or grade source support, coverage, or exact headings.
 
@@ -59,6 +57,6 @@ Review flags prioritize negative/ambiguous support verdicts, material findings, 
 
 `ChatOpenAI` supplies structured output to fresh mutable DeepEval metrics for each meeting. Actual judge calls share a request limit. Retries do not silently switch models or truncate sources. Context-limit failures are execution errors. Trace upload is suppressed, while sources are sent to the configured judge endpoint.
 
-Compare saved producer-template and methodology versions, prompt/policy fingerprints, source hashes, and safe effective judge settings. Package versions alone cannot identify a rubric revision. Keep inputs fixed, inspect failures independently, and repeat noisy cases to assess variation.
+Compare saved methodology versions, evaluator and policy fingerprints, source hashes, and safe effective judge settings. Package versions alone cannot identify a rubric revision. Keep inputs fixed, inspect failures independently, and repeat noisy cases to assess variation.
 
-Offline tests establish execution and deterministic behavior, not semantic judge accuracy. The [calibration workflow](calibration.md) keeps synthetic design expectations separate from independent human judgments. Historical scores from methodology 1 are integration evidence only.
+Offline tests establish execution and deterministic behavior, not semantic judge accuracy. The [calibration workflow](calibration.md) keeps synthetic design expectations separate from independent human judgments. Historical scores from earlier methodologies are integration evidence only and are not a comparison baseline for methodology 3.

@@ -24,7 +24,7 @@ def load_manifest(path: Path) -> dict:
         raise ValueError("Expected fixture schema_version 1 and a cases list.")
     if not manifest["cases"]:
         raise ValueError("The manifest must contain at least one case.")
-    for field in ("suite_id", "producer_template_version", "methodology_version"):
+    for field in ("suite_id", "methodology_version"):
         if not isinstance(manifest.get(field), str) or not manifest[field].strip():
             raise ValueError(f"Manifest {field} must contain text.")
     ids = set()
@@ -94,9 +94,9 @@ def run_trials(manifest: dict, manifest_path: Path, *, model: str, trials: int, 
     from meeting_eval import MeetingSummaryEvaluator
     from meeting_eval.models import BatchResult
     from meeting_eval.reports import write_csv, write_reports
-    from meeting_eval.policy import METHODOLOGY_VERSION, TEMPLATE_VERSION
+    from meeting_eval.policy import METHODOLOGY_VERSION
 
-    if manifest["methodology_version"] != METHODOLOGY_VERSION or manifest["producer_template_version"] != TEMPLATE_VERSION:
+    if manifest["methodology_version"] != METHODOLOGY_VERSION:
         raise ValueError("Fixture and installed evaluator policy versions differ; review and update the manifest before running.")
     if trials < 1:
         raise ValueError("trials must be positive.")
@@ -119,7 +119,7 @@ def run_trials(manifest: dict, manifest_path: Path, *, model: str, trials: int, 
                 break
     provenance_keys = (
         "model", "judge_config", "versions", "evaluator_fingerprint", "metrics",
-        "methodology_version", "producer_template_version", "producer_prompt_sha256",
+        "methodology_version",
         "code_revision", "code_dirty", "sales_policy", "scoring", "max_concurrency",
     )
     provenance = {key: results[0].metadata[key] for key in provenance_keys if key in results[0].metadata}
@@ -135,7 +135,6 @@ def run_trials(manifest: dict, manifest_path: Path, *, model: str, trials: int, 
             "requested_evaluations": len(manifest["cases"]) * trials,
             "attempted_evaluations": len(results),
             "stopped_after_configuration_failure": configuration_failed,
-            "producer_template_version": manifest["producer_template_version"],
             "methodology_version": manifest["methodology_version"],
             "model": model,
             "timestamp": datetime.now(timezone.utc).isoformat(),

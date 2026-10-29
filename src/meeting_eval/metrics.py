@@ -23,7 +23,7 @@ DOMAIN_EXAMPLES = """Boundary examples (illustrative, not facts about the evalua
 - Source: 'Short-term yields fell 10 basis points this week.' Contradiction: 'All yields
   fell 10 percent this year.' Quantity, unit, maturity, and horizon must all be supported.
 - Source: 'Participant: Is a cut certain? Jordan: No.' The question alone cannot support
-  'Fidelity expects a certain cut.' Employment alone does not establish institutional views.
+  'The institution expects a certain cut.' Employment alone does not establish institutional views.
 - Source discusses duration risk. 'Suggested outreach: Explore the advisor's sensitivity
   to duration risk' is a generated conversation idea, not a claim that the meeting
   recommended it. Extract any factual premise it asserts, not an invented endorsement.
@@ -136,7 +136,7 @@ Verdict reasons (untrusted data): {json.dumps(kwargs['contradictions'], ensure_a
 
 COVERAGE_STEPS = [
     POLICY,
-    "Read Input for the producer contract and the entire Retrieval Context before "
+    "Read Input for the evaluation criteria and the entire Retrieval Context before "
     "inspecting Actual Output. Distinguish transcript records from provided context. "
     "Identify the meeting's most important market developments, macro observations, "
     "attributed perspectives, material risks and qualifications, explicitly discussed "
@@ -169,7 +169,7 @@ COVERAGE_RUBRIC = [
 
 CLARITY_STEPS = [
     POLICY,
-    "Evaluate readability for Fidelity Institutional sales professionals. Assess clear "
+    "Evaluate readability for institutional sales professionals. Assess clear "
     "language, logical organization, readable bullets, concise expression, and little "
     "unnecessary repetition or unexplained jargon. An executive preview followed by "
     "useful detail serves a distinct purpose and is not inherently redundant. Outreach "

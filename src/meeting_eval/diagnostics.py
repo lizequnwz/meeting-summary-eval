@@ -6,16 +6,14 @@ import re
 from markdown_it import MarkdownIt
 
 from .models import Finding, MetricResult
-from .policy import EMPTY_SECTION_TEXT, HEADINGS, NO_QA_TEXT, NO_TAGS_TEXT, POLICY, PRODUCER_PROMPT
-
-BUSINESS_INSTRUCTIONS = POLICY + "\n\nProducer template being evaluated:\n" + PRODUCER_PROMPT
+from .policy import EMPTY_SECTION_TEXT, HEADINGS, NO_QA_TEXT, NO_TAGS_TEXT, POLICY
 
 
 def diagnostic_prompt(transcript: str, summary: str, provided_context: str | None = None) -> str:
     sources = [{"source": "transcript", "text": transcript}]
     if provided_context is not None:
         sources.append({"source": "context", "text": provided_context})
-    return f"""{BUSINESS_INSTRUCTIONS}
+    return f"""{POLICY}
 Return a structured diagnostic review, not a score. Identify important transcript topics
 before comparing coverage. Ignore small talk, repetition, incidental details, and context-
 only topics not discussed in the meeting. Check essential executive prioritization and
@@ -32,7 +30,7 @@ material numeric/directional/temporal/causal distortions, removed decision-chang
 qualifications, or omission of a central topic. Use medium/low for lesser issues.
 Distinguish direct contradiction from support not found. Use kind uncertainty for source
 ambiguity, conflicting records, apparent transcript error, or unclear attribution. Other
-kinds: contradiction, unsupported_claim, missing_topic, fidelity_attribution, product_claim,
+kinds: contradiction, unsupported_claim, missing_topic, institutional_attribution, product_claim,
 material_distortion, certainty_inflation. Findings are judge assessments, not confirmed
 facts. Avoid duplicates and do not invent issues to fill categories.
 Set qa_present true when substantive questions occurred, including unanswered questions;
@@ -40,8 +38,9 @@ false when no substantive questions occurred; null if unclear. Questions can occ
 Never turn a participant question into a position or invent an absent answer. An unanswered
 question should be preserved as unanswered. Generated outreach questions are not meeting Q&A.
 For each finding provide the section when identifiable, a concise description, and a small,
-generalizable suggested_prompt_change when useful. Assess the supplied producer template
-before proposing changes: do not suggest rules already present or fixture-specific facts.
+generalizable suggested_prompt_change when useful. The summary-generation prompt is not
+provided; frame suggestions as improvements to consider, not claims about its contents.
+Avoid fixture-specific facts.
 Evidence must be short, exact, contiguous verbatim quotes, long enough to identify a unique
 passage. Use source transcript, context, or summary accurately. Missing-topic findings need
 transcript evidence; claim findings need summary evidence and relevant transcript/context
@@ -196,7 +195,7 @@ def check_structure(summary: str, qa_present: bool | None) -> tuple[MetricResult
     findings = [Finding(
         kind="structure", severity="low", section=None,
         description=f"Deterministic structure check failed: {name}.",
-        suggested_prompt_change="Follow the six-section template, item/word limits, provenance labels, and absence markers.",
+        suggested_prompt_change="Follow the six-section evaluation format, item/word limits, provenance labels, and absence markers.",
     ) for name in failures]
     return MetricResult(
         name="structure", score=sum(applicable) / len(applicable),

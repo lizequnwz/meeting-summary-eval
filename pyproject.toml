@@ -30,9 +30,6 @@ meeting-eval-prompts = "meeting_eval.prompt_review:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-meeting_eval = ["prompts/*.md"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

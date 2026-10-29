@@ -12,7 +12,7 @@ separate these steps so the first lessons need neither credentials nor model req
 | 2 | [03 — DeepEval metric lab](../notebooks/03_deepeval_metric_lab.ipynb) | Run actual DeepEval metrics with clearly labeled prewritten judge responses; inspect claims, verdicts, questions, and rubrics. | None |
 | 3 | [01 — Single meeting](../notebooks/01_single_meeting.ipynb) | Evaluate one fictional meeting with a real judge; inspect every claim and quotation. | Normally about 6; optional individual metrics add calls |
 | 4 | [02 — Batch evaluation](../notebooks/02_batch_evaluation.ipynb) | Evaluate several meetings, inspect recurring issues, and open the saved report. | Normally about 6 per meeting |
-| 5 | [04 — Prompt review and experiments](../notebooks/04_prompt_review_and_experiments.ipynb) | Review prompts, prepare one change, and learn to compare summaries with fixed judging rules. | None by default; live generation/evaluation requires explicit opt-in |
+| 5 | [04 — Prompt review and experiments](../notebooks/04_prompt_review_and_experiments.ipynb) | Review judge prompts and compare supplied summaries with fixed judging rules. | None by default; live evaluation requires explicit opt-in |
 
 You can read lesson 04 before spending anything. The numbers preserve the existing
 single-meeting and batch notebooks; the order above puts the conceptual lessons first.
@@ -90,7 +90,7 @@ The correct field mapping depends on the metric. In this package:
 
 | Field | Meaning |
 | --- | --- |
-| `input` | Evaluation instructions and the producer contract. It does not have to be an English question. |
+| `input` | Evaluation instructions and format criteria. It does not have to be an English question. |
 | `actual_output` | The generated meeting summary. |
 | `retrieval_context` | Labeled full transcript and optional supplied context. This package has no retriever. |
 | `expected_output` | Not required for these reference-free metrics. |
@@ -107,13 +107,12 @@ requiring one canonical reference summary.
 
 ## Where should I review or edit the prompts?
 
-Start with the producer prompt: it tells Zoom what to write. Judge prompts tell this
-package how to evaluate the resulting summary. Editing one does not automatically update
-the other, and changing a judge while comparing producer variants changes the benchmark.
+Judge prompts tell this package how to evaluate a supplied summary. Review the shared
+evaluation policy first, then the metric and diagnostic instructions. Keep those rules
+fixed when comparing summaries so a judge change does not alter the benchmark.
 
 | File | Role | When to edit |
 | --- | --- | --- |
-| [summary-template-v4.1.md](../src/meeting_eval/prompts/summary-template-v4.1.md) | Producer instructions to copy into Zoom. | Improve generated summaries or change their required format. |
 | [policy.py](../src/meeting_eval/policy.py) | Shared source, attribution, context, and outreach policy. | Deliberately change what counts as supported or acceptable. |
 | [metrics.py](../src/meeting_eval/metrics.py) | Faithfulness extraction/verdict prompts, coverage steps/rubric, clarity rubric. | Correct demonstrated judge errors or redefine a scoring dimension. |
 | [diagnostics.py](../src/meeting_eval/diagnostics.py) | Evidence-rich diagnostic prompt and deterministic structure checks. | Improve omission/severity findings, suggestions, evidence rules, or format checks. |
@@ -123,27 +122,26 @@ You can review effective prompts without opening Python files or making model re
 
 ```bash
 .venv/bin/meeting-eval-prompts
-.venv/bin/meeting-eval-prompts --show producer
+.venv/bin/meeting-eval-prompts --show policy
 .venv/bin/meeting-eval-prompts --show coverage
 .venv/bin/meeting-eval-prompts --output results/prompt-review-001
 ```
 
-The export contains the producer prompt, shared policy, system instruction, four
+The export contains the shared policy, system instruction, four
 faithfulness-stage prompts, coverage/clarity steps and rubrics, diagnostic prompt, and a
 fingerprint manifest. Source data are visible placeholders. DeepEval adds its own scoring
 wrapper around the exported GEval steps; these are not stored private model thoughts.
 Exports are **review copies**; editing them does not alter runtime instructions.
 
-For an experiment, keep the candidate producer text in a separate file, and keep the
-evaluator contract fixed. Lesson 04 shows a diff and records the candidate prompt hash.
-Only promote the change to the packaged template after inspecting improvements and
-regressions. A new contract revision should update its filename, version constant, resource
-path, examples, and related documentation together. Restart a notebook kernel after source
-prompt edits so imported constants do not remain stale.
+For an experiment, supply baseline and candidate summaries from the same sources and keep
+the evaluation policy fixed. Lesson 04 records the inputs and compares compatible saved
+runs. When changing evaluation criteria, update the methodology version, examples, and
+related documentation together, and establish a new baseline. Restart a notebook kernel
+after source prompt edits so imported constants do not remain stale.
 
 ## Use it on a real meeting
 
-1. Read one transcript and its Zoom summary yourself. Note the main points, numbers,
+1. Read one transcript and its summary yourself. Note the main points, numbers,
    qualifiers, speaker attribution, and one error you would care about in a client conversation.
 2. Save the exact producer inputs: transcript, summary, and any context the producer received.
    Start with the single-meeting notebook; do not tune a threshold on one case.
@@ -155,14 +153,13 @@ prompt edits so imported constants do not remain stale.
    whether it was extraction loss, ambiguous source text, incorrect support, an omission,
    or a severity error. Add a focused regression case.
 6. After several reviewed meetings, make one producer change. Generate baseline and
-   candidate summaries on the same sources using the same actual Zoom configuration.
+   candidate summaries on the same sources using the same summarizer configuration.
    Judge them under the same fixed policy and inspect paired results.
 7. Repeat noisy cases and reserve examples that do not drive edits. Use the
    [calibration workflow](calibration.md) for independent review and missed-error analysis.
 
-Lesson 04's optional direct-model generation is a learning experiment. It does not reproduce
-Zoom's internal model, preprocessing, or runtime, so those results cannot establish that
-the same prompt change improves Zoom. Evaluate actual Zoom-generated pairs for that claim.
+Obtain baseline and candidate summaries from the summarizer you intend to improve, then
+supply them to lesson 04. This package evaluates those summaries; it does not generate them.
 
 ## Common surprises
 

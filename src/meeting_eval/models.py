@@ -16,7 +16,7 @@ class Evidence(BaseModel):
 class Finding(BaseModel):
     kind: Literal[
         "contradiction", "unsupported_claim", "missing_topic", "uncertainty",
-        "structure", "clarity", "fidelity_attribution", "product_claim",
+        "structure", "clarity", "institutional_attribution", "product_claim",
         "material_distortion", "certainty_inflation",
     ]
     severity: Literal["high", "medium", "low"]

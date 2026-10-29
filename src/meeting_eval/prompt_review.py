@@ -1,4 +1,4 @@
-"""Inspect and export the effective producer and judge prompts without model calls."""
+"""Inspect and export the effective evaluation prompts without model calls."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .metrics import (
     CLARITY_RUBRIC, CLARITY_STEPS, COVERAGE_RUBRIC, COVERAGE_STEPS,
     MeetingFaithfulnessTemplate,
 )
-from .policy import METHODOLOGY_VERSION, POLICY, PRODUCER_PROMPT, TEMPLATE_VERSION
+from .policy import METHODOLOGY_VERSION, POLICY
 from .provenance import evaluator_fingerprint
 
 
@@ -26,7 +26,6 @@ def _rubric_text(steps, rubric) -> str:
 def review_prompts() -> dict[str, str]:
     """Return actual effective instructions using visible placeholders for input data."""
     return {
-        "producer": PRODUCER_PROMPT,
         "policy": POLICY,
         "judge-system": JUDGE_SYSTEM_INSTRUCTION,
         "faithfulness-source": MeetingFaithfulnessTemplate.generate_truths(retrieval_context="[LABELED TRANSCRIPT AND OPTIONAL CONTEXT]"),
@@ -52,12 +51,11 @@ def export_prompts(output_dir: str | Path) -> Path:
         (output / f"{name}.md").write_text(text, encoding="utf-8")
         entries.append({"name": name, "file": f"{name}.md", "sha256": hashlib.sha256(text.encode()).hexdigest()})
     manifest = {
-        "producer_template_version": TEMPLATE_VERSION,
         "methodology_version": METHODOLOGY_VERSION,
         "evaluator_fingerprint": evaluator_fingerprint(),
         "prompts": entries,
         "notes": [
-            "Review copies only. Runtime reads the packaged producer resource and Python prompt definitions.",
+            "Review copies only. Runtime reads the Python evaluation prompt definitions.",
             "Input data are placeholders. No transcript, credentials, or model responses were loaded.",
             "coverage.md and clarity.md show configured steps/rubrics; DeepEval adds its scoring/schema wrapper.",
         ],
@@ -81,7 +79,7 @@ def main(argv=None) -> int:
         except OSError as exc:
             parser.exit(2, f"Could not export prompts: {type(exc).__name__}. Choose a new writable directory.\n")
     else:
-        print(f"Producer template {TEMPLATE_VERSION}; evaluation methodology {METHODOLOGY_VERSION}")
+        print(f"Evaluation methodology {METHODOLOGY_VERSION}")
         print("Available prompts:\n" + "\n".join(f"  {name}" for name in choices))
         print("Use --show NAME to read a prompt, or --output NEW_DIRECTORY to export a review bundle.")
     return 0
