@@ -7,6 +7,10 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    env:
+      DEEPEVAL_TELEMETRY_OPT_OUT: '1'
+      DEEPEVAL_DISABLE_DOTENV: '1'
+      DEEPEVAL_DISABLE_LEGACY_KEYFILE: '1'
     strategy:
       matrix:
         python-version: ['3.11', '3.13']
@@ -15,38 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install tested dependencies
-        run: python -m pip install --upgrade -e '.[dev]'
+      - name: Install dependencies
+        run: python -m pip install -e '.[dev]'
       - name: Check installed dependencies
         run: python -m pip check
-      - name: Run offline tests
+      - name: Check pipeline, exports, and notebook offline
         run: python -m pytest
-      - name: Validate calibration manifest without model calls
-        run: python scripts/calibrate.py
-      - name: Check clean, syntactically valid notebooks
-        run: |
-          python - <<'PY'
-          import ast
-          import json
-          from pathlib import Path
-          for path in Path('notebooks').glob('*.ipynb'):
-              notebook = json.loads(path.read_text())
-              for cell in notebook['cells']:
-                  if cell['cell_type'] == 'code':
-                      assert cell.get('outputs', []) == [], path
-                      assert cell.get('execution_count') is None, path
-                      compile(''.join(cell['source']), str(path), 'exec', flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-          PY
-  tutorials:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install notebook dependencies
-        run: python -m pip install --upgrade -e '.[notebooks]'
-      - name: Check installed dependencies
-        run: python -m pip check
-      - name: Execute the offline learning path
-        run: python scripts/run_learning_notebooks.py

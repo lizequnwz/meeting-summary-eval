@@ -4,33 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meeting-summary-eval"
-version = "0.2.0"
+version = "0.3.0"
 description = "Source-grounded DeepEval evaluations for Zoom meeting summaries"
 requires-python = ">=3.11"
 dependencies = [
   "deepeval==4.3.2",
-  "langchain-openai==1.7.3",
-  "langchain-core>=1,<2",
-  "langsmith>=0.14.9,<1",
-  "pydantic>=2.12,<3",
   "python-dotenv>=1.2,<2",
-  "openai>=3.40,<4",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=1"]
-notebooks = ["pandas>=2.2", "matplotlib>=3.9", "nbformat>=5", "nbclient>=0.10", "nbconvert>=7", "ipykernel>=6", "jupyterlab>=4", "beautifulsoup4>=4.12,<5"]
+dev = ["pytest>=8"]
+notebooks = ["ipykernel>=6", "jupyterlab>=4"]
 
 [project.scripts]
 meeting-eval = "meeting_eval.cli:main"
-meeting-eval-compare = "meeting_eval.comparison:main"
-meeting-eval-prompts = "meeting_eval.prompt_review:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-addopts = "-p no:rerunfailures"
+addopts = "-p no:deepeval -p no:rerunfailures"

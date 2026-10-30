@@ -1,25 +1,25 @@
-FICTIONAL SOFTWARE TEST SCENARIO — all roles, figures and views are invented.
+# Market discussion
 
-## Executive Briefing
-- Inflation eased from 3.4% to 3.2%, but moderation remained uneven; the fictional institutional presenter offered no rate-cut date forecast.
-- Short-term yields fell 10 basis points while longer-term yields were roughly unchanged; higher yield does not eliminate price risk.
+- The latest annual inflation reading eased from 3.4% to 3.2%. One observation does not
+  establish a durable trend; the fictional institutional presenter described disinflation
+  as uneven and policy as dependent on incoming data, with no rate-cut date forecast.
+- Short-term yields fell 10 basis points during the week while longer-term yields were
+  roughly unchanged. Higher yield does not eliminate price risk.
+- The discussion balanced income opportunities with duration risk. It did not recommend
+  that every client lengthen duration, and no specific fund, launch, or performance promise
+  was discussed.
 
-## Economy & Market Updates
-- The lower annual inflation reading was one observation, not proof of a durable trend.
-- The weekly yield decline applied to short-term maturities; longer-term yields were roughly unchanged.
+## Advisor conversations
 
-## Advisor Outreach & Sales Actions
-- Discussed action: Ask advisors about investment horizon, tolerance for interest-rate volatility, and near-term liquidity needs.
-- Suggested outreach: Ask how a client's near-term cash needs affect their comfort with interest-rate volatility.
+The sales lead asked advisors to explore clients' investment horizons, tolerance for
+interest-rate volatility, and near-term liquidity needs. A suggested outreach question is
+how a client's near-term cash needs affect their comfort with interest-rate volatility.
 
-## Market & Institutional Perspectives
-- The fictional institutional presenter described disinflation as uneven and policy as dependent on incoming data; no rate-cut date was forecast.
-- The discussion balanced income opportunities with duration risk without recommending that every client lengthen duration.
-- No specific fund, launch, or performance promise was discussed.
+## Questions raised
 
-## Questions and Answers
-- **Is a rate cut certain next month?** No; one reading was insufficient, and no rate-cut date forecast was offered.
-- **How should conversations change for clients who need cash soon?** Ask about near-term liquidity before discussing interest-rate volatility; this is a discovery question, not a named-product recommendation.
+**Is a rate cut certain next month?** No. One inflation reading is insufficient, and the
+presenter offered no rate-cut date forecast.
 
-## Search Tags
-Inflation, Interest Rates, Duration Risk, Liquidity, Advisor Discovery
+**How should conversations differ for clients who need cash soon?** Ask about near-term
+liquidity before discussing interest-rate volatility. This is a discovery question, not a
+named-product recommendation.

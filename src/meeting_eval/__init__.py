@@ -1,7 +1,16 @@
-"""Evaluate meeting summaries against their complete source transcripts."""
+"""Native DeepEval scoring for meeting summaries."""
 
-from . import config as _config
-from .evaluator import JudgeConfigurationError, MeetingSummaryEvaluator
-from .models import BatchResult, Evidence, Finding, MeetingResult, MetricResult
+import os
+from pathlib import Path
 
-__all__ = ["MeetingSummaryEvaluator", "JudgeConfigurationError", "BatchResult", "MeetingResult", "MetricResult", "Finding", "Evidence"]
+from dotenv import load_dotenv
+
+# Load local settings before DeepEval initializes its native models.
+os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
+os.environ["DEEPEVAL_DISABLE_DOTENV"] = "1"
+os.environ["DEEPEVAL_DISABLE_LEGACY_KEYFILE"] = "1"
+load_dotenv(Path(".env"), override=False)
+
+from .metrics import create_metric
+
+__all__ = ["create_metric"]
