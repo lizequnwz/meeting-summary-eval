@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import tempfile
@@ -39,19 +38,7 @@ def safe_endpoint(url) -> str | None:
 
 
 def model_endpoint(model) -> str | None:
-    endpoint = getattr(model, "base_url", None)
-    if endpoint is None and type(model).__name__ == "OpenAIModel":
-        endpoint = "https://api.openai.com/v1"
-    return safe_endpoint(endpoint)
-
-
-def cost_value(cost) -> float | None:
-    """DeepEval can represent unknown pricing as float(0) with value=None."""
-    value = getattr(cost, "value", cost)
-    if value is None:
-        return None
-    value = float(value)
-    return value if math.isfinite(value) and value >= 0 else None
+    return safe_endpoint(getattr(model, "base_url", None))
 
 
 def read_json(path: str | Path):

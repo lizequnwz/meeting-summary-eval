@@ -3,19 +3,24 @@
 import os
 
 from deepeval.metrics import SummarizationMetric
-from deepeval.models import DeepEvalBaseLLM, OpenAIModel
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
+
+from .judge import LangChainJudge
 
 
-def resolve_model(model: str | DeepEvalBaseLLM | None = None) -> DeepEvalBaseLLM:
+def resolve_model(model: str | BaseChatModel | None = None) -> LangChainJudge:
     """Use the same judge configuration for preparation and evaluation."""
     if model is None or isinstance(model, str):
-        return OpenAIModel(
+        model = ChatOpenAI(
             model=model or os.getenv("OPENAI_MODEL", "gpt-6-luna"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
+            base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE") or "https://api.openai.com/v1",
+            timeout=120,
+            max_retries=2,
         )
-    if not isinstance(model, DeepEvalBaseLLM):
-        raise TypeError("model must be a model name or DeepEvalBaseLLM instance")
-    return model
+    if not isinstance(model, BaseChatModel):
+        raise TypeError("model must be a model name or LangChain BaseChatModel instance")
+    return LangChainJudge(model)
 
 
 def validate_questions(questions: list[str]) -> list[str]:
@@ -30,7 +35,7 @@ def validate_questions(questions: list[str]) -> list[str]:
 
 
 def create_metric(
-    model: str | DeepEvalBaseLLM | None = None,
+    model: str | BaseChatModel | None = None,
     *,
     assessment_questions: list[str],
     async_mode: bool = True,

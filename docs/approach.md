@@ -12,6 +12,10 @@ The evaluator returns two complementary measures: whether extracted summary clai
 supported, and whether selected transcript information survives in the summary. The
 details explain the scores so a reader can investigate omissions and distortions.
 
+Every LLM request uses a LangChain chat model with structured output. DeepEval retains
+its native prompts and scoring behavior; the shared judge adapter connects those requests
+to LangChain for question preparation and summary evaluation.
+
 The transcript establishes what was said. It does not independently verify market facts,
 forecasts, or investment opinions. Business context identifies reader needs and priorities;
 it contributes no factual evidence about the meeting.
@@ -56,6 +60,7 @@ deterministic.
 | Decision | Reason |
 | --- | --- |
 | Native DeepEval scoring | Keep established score calculations and judgments instead of maintaining a second scoring algorithm |
+| LangChain chat models | Use one model interface with structured output for preparation and all native judging requests |
 | Frozen questions | Compare summary versions against the same sampled transcript facts |
 | Explicit regeneration | Make changes to the evaluation sample deliberate and traceable |
 | Fresh metric per evaluation | Avoid carrying native metric state between meetings or summary versions |

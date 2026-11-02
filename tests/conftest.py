@@ -7,9 +7,13 @@ os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
 os.environ["DEEPEVAL_DISABLE_DOTENV"] = "1"
 os.environ["DEEPEVAL_DISABLE_LEGACY_KEYFILE"] = "1"
 os.environ["OPENAI_API_KEY"] = "offline-test-key"
+os.environ["LANGSMITH_TRACING"] = "false"
 
 import pytest
-from deepeval.models import DeepEvalBaseLLM
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import ConfigDict, Field
 
 
 @pytest.fixture(autouse=True)
@@ -23,20 +27,35 @@ def offline(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
 
 
-class ScriptedJudge(DeepEvalBaseLLM):
-    def __init__(self):
-        self.prompts = []
-        self.verdicts = ["yes", "no", "borderline"]
-        self.summary_answers = ["yes", "no"]
-        self.fail_source = None
+class ScriptedJudge(BaseChatModel):
+    """Exercise LangChain's real structured-output runnable and parser offline."""
 
-    def load_model(self):
-        return self
+    model_config = ConfigDict(extra="allow")
+    model_name: str = "offline-scripted-judge"
+    prompts: list = Field(default_factory=list)
+    verdicts: list[str] = Field(default_factory=lambda: ["yes", "no", "borderline"])
+    summary_answers: list[str] = Field(default_factory=lambda: ["yes", "no"])
+    fail_source: str | None = None
 
-    def get_model_name(self):
+    @property
+    def _llm_type(self):
         return "offline-scripted-judge"
 
-    def generate(self, prompt, schema=None):
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        return self.bind(schema=tools[0])
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        schema = kwargs["schema"]
+        prompt = "\n".join(str(message.content) for message in messages)
+        parsed = self.respond(prompt, schema)
+        raw = AIMessage(
+            content="",
+            tool_calls=[{"id": "offline-call", "name": schema.__name__, "args": parsed.model_dump(mode="json")}],
+            usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        )
+        return ChatResult(generations=[ChatGeneration(message=raw)])
+
+    def respond(self, prompt, schema):
         stage = schema.__name__
         self.prompts.append((stage, prompt))
         if stage == "Truths" and self.fail_source and self.fail_source in prompt:
@@ -54,10 +73,6 @@ class ScriptedJudge(DeepEvalBaseLLM):
             "SummarizationScoreReason": {"reason": "Inspect the native claim and coverage verdicts."},
         }
         return schema.model_validate(data[stage])
-
-    async def a_generate(self, prompt, schema=None):
-        return self.generate(prompt, schema)
-
 
 @pytest.fixture
 def judge():

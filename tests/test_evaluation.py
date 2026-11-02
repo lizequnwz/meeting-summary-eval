@@ -7,7 +7,7 @@ import json
 import pytest
 
 from meeting_eval import evaluate_meeting, get_or_prepare_questions, load_evaluation, new_run, save_evaluation
-from meeting_eval.storage import cost_value, safe_endpoint, text_hash
+from meeting_eval.storage import safe_endpoint, text_hash
 
 
 def prepare(tmp_path, judge):
@@ -30,7 +30,7 @@ def test_native_judgments_are_paired_and_saved_without_rejudging(tmp_path, judge
                              "coverage_covered": 1, "coverage_eligible": 2, "coverage_total": 2}
     assert row["alignment"][1] == {"claim_id": "C002", "claim": "Second claim", "verdict": "no", "reason": "The claim is no."}
     assert row["coverage"][1]["outcome"] == "missing"
-    assert row["evaluation"]["model"] == judge.get_model_name()
+    assert row["evaluation"]["model"] == judge.model_name
     assert row["evaluation"]["cost"] is None
     assert row["evaluation"]["duration_seconds"] >= 0
     run = new_run()
@@ -46,7 +46,7 @@ def test_native_judgments_are_paired_and_saved_without_rejudging(tmp_path, judge
 @pytest.mark.parametrize("malformation", ["coverage", "alignment", "answerability"])
 def test_incomplete_structured_responses_cannot_produce_completed_scores(tmp_path, judge, monkeypatch, malformation):
     frozen = prepare(tmp_path, judge)
-    original = judge.generate
+    original = judge.respond
 
     def malformed(prompt, schema=None):
         if malformation == "coverage" and schema.__name__ == "Answers":
@@ -57,7 +57,7 @@ def test_incomplete_structured_responses_cannot_produce_completed_scores(tmp_pat
             return schema.model_validate({"answers": ["yes", "maybe"]})
         return original(prompt, schema)
 
-    monkeypatch.setattr(judge, "generate", malformed)
+    monkeypatch.setattr(judge, "respond", malformed)
     row = evaluate(frozen, judge)
     assert row["status"] == "error"
     assert "Incomplete evaluation" in row["error"]
@@ -68,14 +68,14 @@ def test_incomplete_structured_responses_cannot_produce_completed_scores(tmp_pat
 
 def test_coverage_excludes_source_unanswerable_questions(tmp_path, judge, monkeypatch):
     frozen = prepare(tmp_path, judge)
-    original = judge.generate
+    original = judge.respond
 
     def source_unanswerable(prompt, schema=None):
         if schema.__name__ == "Answers":
             return schema.model_validate({"answers": ["yes", "no"]})
         return original(prompt, schema)
 
-    monkeypatch.setattr(judge, "generate", source_unanswerable)
+    monkeypatch.setattr(judge, "respond", source_unanswerable)
     row = evaluate(frozen, judge)
     assert row["status"] == "completed"
     assert row["scores"]["coverage"] == 1
@@ -86,7 +86,7 @@ def test_coverage_excludes_source_unanswerable_questions(tmp_path, judge, monkey
 
 def test_zero_denominators_retain_native_zero_scores(tmp_path, judge, monkeypatch):
     frozen = prepare(tmp_path, judge)
-    original = judge.generate
+    original = judge.respond
 
     def empty_details(prompt, schema=None):
         if schema.__name__ == "Claims":
@@ -95,7 +95,7 @@ def test_zero_denominators_retain_native_zero_scores(tmp_path, judge, monkeypatc
             return schema.model_validate({"answers": ["no", "no"]})
         return original(prompt, schema)
 
-    monkeypatch.setattr(judge, "generate", empty_details)
+    monkeypatch.setattr(judge, "respond", empty_details)
     row = evaluate(frozen, judge)
     assert row["status"] == "completed"
     assert row["scores"] == {"alignment": 0, "coverage": 0, "overall": 0}
@@ -119,7 +119,7 @@ def test_provider_errors_do_not_expose_sources_or_credentials(tmp_path, judge, m
     def failed(*args, **kwargs):
         raise RuntimeError("SecretSource Authorization: secret-key")
 
-    monkeypatch.setattr(judge, "generate", failed)
+    monkeypatch.setattr(judge, "respond", failed)
     row = evaluate(frozen, judge)
     assert row["status"] == "error"
     assert "SecretSource" not in json.dumps(row)
@@ -127,12 +127,14 @@ def test_provider_errors_do_not_expose_sources_or_credentials(tmp_path, judge, m
 
 
 def test_failing_model_metadata_cannot_escape_error_redaction(tmp_path, judge, monkeypatch):
+    from meeting_eval.judge import LangChainJudge
+
     frozen = prepare(tmp_path, judge)
 
-    def failed_name():
+    def failed_name(self):
         raise RuntimeError("Private authentication detail")
 
-    monkeypatch.setattr(judge, "get_model_name", failed_name)
+    monkeypatch.setattr(LangChainJudge, "get_model_name", failed_name)
     row = evaluate(frozen, judge)
     assert row["status"] == "error"
     assert row["evaluation"]["model"] is None
@@ -163,15 +165,8 @@ def test_inconsistent_saved_results_are_rejected(tmp_path, judge, mutation):
         save_evaluation(changed, path)
 
 
-def test_endpoint_and_unknown_native_cost_provenance():
+def test_endpoint_and_normalized_input_provenance():
     assert safe_endpoint("https://user:secret@example.com/v1?api_key=secret#fragment") == "https://example.com/v1"
-
-    class UnknownCost(float):
-        value = None
-
-    assert cost_value(UnknownCost(0)) is None
-    assert cost_value(0) == 0
-    assert cost_value(0.25) == 0.25
     assert text_hash("\ufeffSourceAlpha\r\n") == text_hash("SourceAlpha\n")
 
 

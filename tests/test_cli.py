@@ -8,6 +8,7 @@ import pytest
 
 from meeting_eval import cli, evaluation, metrics, questions
 from meeting_eval.evaluation import load_evaluation
+from meeting_eval.judge import LangChainJudge
 
 
 def input_folders(tmp_path):
@@ -23,8 +24,11 @@ def add_meeting(transcripts, summaries, meeting_id="alpha", marker="Alpha"):
 
 
 def offline_judge(monkeypatch, judge):
-    monkeypatch.setattr(questions, "resolve_model", lambda model=None: judge)
-    monkeypatch.setattr(metrics, "resolve_model", lambda model=None: judge)
+    def resolve(model=None):
+        return LangChainJudge(judge)
+
+    monkeypatch.setattr(questions, "resolve_model", resolve)
+    monkeypatch.setattr(metrics, "resolve_model", resolve)
 
 
 def arguments(tmp_path, transcripts, summaries):

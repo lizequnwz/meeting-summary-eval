@@ -12,7 +12,7 @@ from deepeval.test_case import LLMTestCase
 from .inputs import normalize_text
 from .metrics import create_metric
 from .questions import validate_question_set
-from .storage import atomic_write_json, cost_value, model_endpoint, read_json, safe_endpoint, text_hash, utc_now
+from .storage import atomic_write_json, model_endpoint, read_json, safe_endpoint, text_hash, utc_now
 
 
 class InvalidJudgment(ValueError):
@@ -159,9 +159,6 @@ async def evaluate_meeting(
             if metric is not None:
                 metadata["model"] = metric.evaluation_model
                 metadata["endpoint"] = model_endpoint(metric.model)
-                metadata["cost"] = cost_value(metric.evaluation_cost)
-            elif hasattr(model, "get_model_name"):
-                metadata["model"] = model.get_model_name()
         except Exception:
             # Optional provenance must not mask a judge failure or expose its message.
             pass

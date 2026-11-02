@@ -20,6 +20,9 @@ def saved_run(tmp_path, judge):
     question_set, _ = asyncio.run(get_or_prepare_questions(
         "meeting", transcript, questions_dir=tmp_path / "questions", model=judge, n=2,
     ))
+    assert question_set["generation"]["model"] == judge.model_name
+    assert question_set["generation"]["cost"] is None
+    # Historical costs exercise report presentation independently of the adapter.
     question_set["generation"]["cost"] = 0.125
     row = {
         "meeting_id": "meeting", "status": "completed",

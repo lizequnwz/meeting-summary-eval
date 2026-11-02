@@ -3,6 +3,8 @@
 This project evaluates existing meeting summaries against their transcripts. It uses
 DeepEval's native alignment and coverage scores, freezes transcript-specific assessment
 questions for reuse, and exports Excel and HTML from a saved evaluation.
+All LLM requests use LangChain chat models with structured output; DeepEval's native
+scoring remains unchanged.
 
 | Document | What it explains |
 | --- | --- |

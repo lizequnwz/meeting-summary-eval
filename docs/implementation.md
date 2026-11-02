@@ -10,6 +10,7 @@ and judge. See the [README](../README.md) for commands and the
 | Module | Responsibility |
 | --- | --- |
 | [`inputs.py`](../src/meeting_eval/inputs.py) | Normalize text; pair flat `.txt`/`.md` folders by case-sensitive filename stem; retain missing/duplicate-partner errors. |
+| [`judge.py`](../src/meeting_eval/judge.py) | Adapt a LangChain chat model to DeepEval's judge interface; invoke native response schemas through structured output. |
 | [`metrics.py`](../src/meeting_eval/metrics.py) | Resolve the judge, validate explicit questions, construct a fresh native DeepEval metric. |
 | [`questions.py`](../src/meeting_eval/questions.py) | Generate, validate, fingerprint, persist, and reuse transcript-specific questions. |
 | [`evaluation.py`](../src/meeting_eval/evaluation.py) | Evaluate a meeting; pair native verdicts with claims/questions; validate and save canonical run records. |
@@ -20,13 +21,26 @@ and judge. See the [README](../README.md) for commands and the
 
 The package loads `.env` from the working directory with existing environment values taking
 precedence. It disables DeepEval telemetry, DeepEval's own dotenv loading, and legacy keyfile
-loading. A model name resolves through `OpenAIModel`; an explicit `DeepEvalBaseLLM` instance
-is used directly. The model-name default is `OPENAI_MODEL`, then `gpt-6-luna`;
-`OPENAI_BASE_URL` configures the native OpenAI-compatible endpoint.
+loading. Public model arguments accept `str | BaseChatModel | None`. A model name or omitted
+model creates LangChain's `ChatOpenAI`; a configured `BaseChatModel` instance is reused.
+The default model name is `OPENAI_MODEL`, then `gpt-6-luna`. Endpoint precedence is
+`OPENAI_BASE_URL`, `OPENAI_API_BASE`, then `https://api.openai.com/v1`. Default construction
+uses a 120-second timeout and two retries. An injected model retains its own configuration.
+Configured LangChain callbacks and tracing also retain their normal behavior and can
+receive prompts and responses.
+
+`LangChainJudge` is the internal bridge to DeepEval's `DeepEvalBaseLLM` interface. Every
+generation call uses `model.with_structured_output(schema, include_raw=True)` followed by
+`invoke` or `ainvoke`. The schemas are Pydantic models supplied by the native metric or
+question preparation. Injected models must support that structured-output interface.
+Response parsing failures remain evaluation errors; the adapter preserves native prompts
+and scoring. Question preparation and metric creation each wrap the configured model with
+the same adapter implementation.
 
 ## Public Python APIs
 
 These helpers are exported by `meeting_eval`. Paths may be strings or `Path` objects.
+Every `model` parameter accepts a model name, a LangChain `BaseChatModel`, or `None`.
 
 | Helper | Contract |
 | --- | --- |
@@ -51,7 +65,44 @@ invalid existing set supplies no usable previous count. A supplied `n` must be a
 integer; booleans are rejected. Questions must be nonblank strings and distinct after
 stripping whitespace and case-folding; their original text and order are retained.
 
-This report-only example makes no model calls. Choose an existing run file:
+## Configure a LangChain model
+
+This example runs in the notebook or another asynchronous context. It reuses one explicit
+`ChatOpenAI` instance for preparation and evaluation:
+
+```python
+import os
+from pathlib import Path
+from langchain_openai import ChatOpenAI
+from meeting_eval import evaluate_meeting, get_or_prepare_questions
+
+model = ChatOpenAI(
+    model=os.getenv("OPENAI_MODEL", "gpt-6-luna"),
+    base_url=(os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE")
+              or "https://api.openai.com/v1"),
+    timeout=120,
+    max_retries=2,
+)
+transcript = Path("examples/data/transcripts/meeting_001.txt").read_text(encoding="utf-8-sig")
+summary = Path("examples/data/summaries/meeting_001.md").read_text(encoding="utf-8-sig")
+context = Path("examples/business-context.md").read_text(encoding="utf-8-sig")
+question_set, generated = await get_or_prepare_questions(
+    "meeting_001", transcript, business_context=context, model=model,
+)
+result = await evaluate_meeting(
+    "meeting_001", transcript, summary, question_set=question_set, model=model,
+    question_generation_performed=generated,
+)
+```
+
+Passing `model=None` selects the same default configuration lazily; passing a string
+changes the model name. Other configured LangChain chat models can be injected when they
+support Pydantic structured output with `include_raw=True`. Their provider integration
+must be installed in the environment. The returned result still needs to be added to a
+run and saved; the notebook demonstrates that step.
+
+This report-only example makes no model calls and constructs no model client. Choose an
+existing run file:
 
 ```python
 from pathlib import Path
@@ -186,20 +237,23 @@ Neither report adds per-question reasoning or evidence absent from native result
 
 Provider exception messages are withheld because they can contain sources or credentials.
 Generation raises a generic failure; evaluation records retain the exception class with a
-generic failure explanation. Endpoint
-provenance removes user information, query parameters, and fragments while retaining the
-scheme, host/port, and path. Unknown custom-model endpoints can be null; a native
-`OpenAIModel` without `base_url` records `https://api.openai.com/v1`.
+generic failure explanation. Model provenance uses public `model_name`, `model`, or
+`deployment_name` properties, then the chat model's class name. Endpoint provenance reads
+known public endpoint properties or the explicitly configured default-model endpoint;
+it does not serialize the model configuration. Sanitization removes user information,
+query parameters, and fragments while retaining the scheme, host/port, and path. An
+injected model's endpoint can be unavailable.
 
-Generation and evaluation costs are separately reported when supplied by the judge.
-Unavailable, negative, or nonfinite numeric costs become null, including DeepEval's
-unknown-price value represented as numeric zero with `.value=None`. Historical generation cost remains provenance when reused;
-it is current-run spending only when `question_generation_performed` is true. These fields
-are reported observations, not a complete billing reconciliation.
+New LangChain preparation and evaluation calls leave USD `cost` values null. Standard
+LangChain raw-message usage metadata describes tokens, not currency; the adapter does
+not infer a dollar price or add token-tracking fields. Nullable cost fields remain part
+of the saved schema, and reports render numeric observations already present in a saved
+record. A reused question set's generation cost remains historical provenance. These
+fields are not a billing reconciliation.
 
 ## Verification
 
-Run `.venv/bin/python -m pytest` for offline checks. Tests use scripted DeepEval judges and
+Run `.venv/bin/python -m pytest` for offline checks. Tests use scripted LangChain chat models and
 block socket connections. They cover question reuse/staleness and failed regeneration,
 native arithmetic and malformed responses, safe errors/provenance, checkpointed interruption,
 saved-data-only report rebuilding, Excel/HTML text safety, and notebook execution from both

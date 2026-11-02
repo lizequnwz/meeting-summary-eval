@@ -6,6 +6,12 @@ alignment, coverage, an overall score, and a reason. The application prepares an
 coverage questions, checks the completeness of the returned judgments, and saves their
 details. It preserves DeepEval's scoring rules.
 
+All LLM calls, including question generation, extraction, verdicts, and the overall reason,
+go through a LangChain chat model. A shared adapter uses the native Pydantic response
+schemas with LangChain's `with_structured_output`; it does not replace the native prompts
+or score calculations. Configure a model name or a structured-output-capable
+`BaseChatModel` as described in [Implementation](implementation.md#configure-a-langchain-model).
+
 The configuration is in [metrics.py](../src/meeting_eval/metrics.py); response validation
 and saved score explanations are in [evaluation.py](../src/meeting_eval/evaluation.py).
 

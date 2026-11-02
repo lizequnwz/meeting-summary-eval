@@ -5,36 +5,25 @@ from copy import deepcopy
 import json
 
 import pytest
-from deepeval.models import DeepEvalBaseLLM
-from deepeval.models.utils import EvaluationCost
+from pydantic import Field
+
+from conftest import ScriptedJudge
 
 from meeting_eval.questions import get_or_prepare_questions, validate_question_set
 from meeting_eval.storage import text_hash
 
 
-class QuestionJudge(DeepEvalBaseLLM):
-    def __init__(self, questions=None, *, cost=None, error=None):
-        self.questions = questions if questions is not None else ["Is the outlook discussed?", "Is a risk identified?"]
-        self.cost = cost
-        self.error = error
-        self.prompts = []
-        self.base_url = "https://user:secret@offline.invalid/v1?api_key=hidden#private"
+class QuestionJudge(ScriptedJudge):
+    questions: list[str] = Field(default_factory=lambda: ["Is the outlook discussed?", "Is a risk identified?"])
+    error: Exception | None = None
+    model_name: str = "offline-question-judge"
+    base_url: str = "https://user:secret@offline.invalid/v1?api_key=hidden#private"
 
-    def load_model(self):
-        return self
-
-    def get_model_name(self):
-        return "offline-question-judge"
-
-    def generate(self, prompt, schema=None):
+    def respond(self, prompt, schema):
         self.prompts.append((schema.__name__, prompt))
         if self.error:
             raise self.error
-        result = schema.model_validate({"questions": self.questions})
-        return (result, self.cost) if self.cost is not None else result
-
-    async def a_generate(self, prompt, schema=None):
-        return self.generate(prompt, schema)
+        return schema.model_validate({"questions": self.questions})
 
 
 def prepare(tmp_path, judge=None, **kwargs):
@@ -50,7 +39,7 @@ def forbid_model(monkeypatch):
 
 
 def test_prepare_once_and_reuse_without_creating_a_judge(tmp_path, monkeypatch):
-    judge = QuestionJudge(cost=EvaluationCost(0.0123, 100, 20))
+    judge = QuestionJudge()
     saved, generated = prepare(tmp_path, judge, business_context="AdvisorAudience")
 
     assert generated is True
@@ -63,7 +52,7 @@ def test_prepare_once_and_reuse_without_creating_a_judge(tmp_path, monkeypatch):
     assert "not a mandatory checklist" in prompt and "standalone questions" in prompt
     assert saved["transcript_sha256"] == text_hash("SourceAlpha: the meeting transcript.")
     assert saved["business_context_sha256"] == text_hash("AdvisorAudience")
-    assert saved["generation"]["cost"] == 0.0123
+    assert saved["generation"]["cost"] is None
     assert saved["generation"]["endpoint"] == "https://offline.invalid/v1"
     assert saved["generation"]["duration_seconds"] >= 0
     assert json.loads((tmp_path / "meeting_001.json").read_text()) == saved
@@ -168,7 +157,7 @@ def test_invalid_generation_never_replaces_saved_questions(tmp_path, questions):
     path = tmp_path / "meeting_001.json"
     original = path.read_bytes()
     with pytest.raises(ValueError):
-        prepare(tmp_path, QuestionJudge(questions), regenerate=True)
+        prepare(tmp_path, QuestionJudge(questions=questions), regenerate=True)
     assert path.read_bytes() == original
 
 
@@ -214,8 +203,8 @@ def test_write_probe_does_not_leave_an_artifact_after_generation_failure(tmp_pat
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unknown_native_cost_stays_unknown(tmp_path):
-    saved, _ = prepare(tmp_path, QuestionJudge(cost=EvaluationCost(None, 10, 20)))
+def test_langchain_question_generation_does_not_invent_a_currency_cost(tmp_path):
+    saved, _ = prepare(tmp_path, QuestionJudge())
     assert saved["generation"]["cost"] is None
 
 

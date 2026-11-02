@@ -15,7 +15,7 @@ from deepeval.metrics.summarization.schema import Questions
 from .inputs import normalize_text
 from .metrics import resolve_model, validate_questions
 from .storage import (
-    atomic_write_json, cost_value, model_endpoint, read_json, safe_endpoint, text_hash, utc_now,
+    atomic_write_json, model_endpoint, read_json, safe_endpoint, text_hash, utc_now,
 )
 
 
@@ -210,19 +210,11 @@ async def get_or_prepare_questions(
     try:
         judge = resolve_model(model)
         response = await judge.a_generate(_prompt(transcript, count, business_context), schema=Questions)
-        cost = None
-        if isinstance(response, tuple) and len(response) == 2:
-            response, raw_cost = response
-            cost = cost_value(raw_cost)
-        if isinstance(response, str):
-            response = Questions.model_validate_json(response)
-        elif not isinstance(response, Questions):
-            response = Questions.model_validate(response)
         generation = {
             "model": judge.get_model_name(),
             "endpoint": model_endpoint(judge),
             "duration_seconds": perf_counter() - started,
-            "cost": cost,
+            "cost": None,
         }
     except Exception:
         raise ValueError(

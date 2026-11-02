@@ -6,6 +6,10 @@ and inspectable questions, claims, answers, and verdicts. Coverage questions are
 once per meeting and saved for reuse. Excel and HTML reports are rendered from the same
 saved evaluation, without making more model calls.
 
+All LLM calls use LangChain chat models with structured output. DeepEval supplies the
+native prompts, judgments, and score calculations; a shared adapter sends their requests
+through the configured LangChain model.
+
 The [business context](examples/business-context.md) describes the audience and purpose:
 institutional sales professionals preparing advisor and client conversations from weekly
 capital-markets meetings. Replace it for another audience or omit it for stock native
@@ -30,9 +34,16 @@ python -m venv .venv
 Install with `-e .` if you only need the Python helpers and batch command. DeepEval is
 pinned to **4.3.2**. Set `OPENAI_API_KEY` in your environment or a local `.env` in the
 working directory. Optional `OPENAI_MODEL` (default `gpt-6-luna`) and `OPENAI_BASE_URL`
-select the judge and endpoint. Process environment settings override `.env`; an explicit
-model overrides `OPENAI_MODEL`. The endpoint must support the selected model and structured
-output.
+select the judge and endpoint. `OPENAI_API_BASE` is also recognized when
+`OPENAI_BASE_URL` is unset. Process environment settings override `.env`; an explicit
+model overrides `OPENAI_MODEL`. A model name or omitted model creates LangChain's
+`ChatOpenAI` with a 120-second timeout and two retries. The endpoint must support the
+selected model and structured output.
+
+Python helpers also accept a configured LangChain `BaseChatModel` instance that supports
+`with_structured_output`. The notebook shows an explicit `ChatOpenAI` setup reused for
+question preparation and evaluation. See the [Python model example](docs/implementation.md#configure-a-langchain-model)
+for the same setup outside the notebook.
 
 ## Evaluate in the notebook
 
@@ -98,8 +109,12 @@ the JSON available for another export attempt.
 The notebook and CLI share the same Python helpers: `get_or_prepare_questions`,
 `evaluate_meeting`, `new_run`, `save_evaluation`, `load_evaluation`, and `export_reports`.
 `create_metric` constructs the native metric from an explicit `assessment_questions`
-list; question generation belongs to the preparation helper. Create a fresh metric for
-each meeting rather than reusing a metric instance.
+list and the same LangChain judge; question generation belongs to the preparation helper.
+Create a fresh metric for each meeting rather than reusing a metric instance.
+
+New evaluations leave USD cost fields empty. LangChain's standard usage metadata reports
+tokens rather than currency, and this project does not infer prices. Saved numeric cost
+observations, when present, remain visible in reports.
 
 ## Read the scores
 
@@ -132,6 +147,7 @@ new questions and evaluating summaries make billable model calls; offline tests 
 pipeline behavior, not judge accuracy. No human-reviewed calibration is included.
 
 DeepEval telemetry is disabled. Transcripts and summaries are sent to the configured judge
-endpoint, and saved question sets and evaluations can contain sensitive source text. Keep
+endpoint. Configured LangChain callbacks or tracing can also receive source text. Saved
+question sets and evaluations can contain sensitive source text. Keep
 credentials and real meeting data out of Git; generated artifacts belong under ignored
 `results/`.

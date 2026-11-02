@@ -97,8 +97,8 @@ def test_notebook_evaluates_once_and_exports_saved_result(
 
     monkeypatch.setattr(meeting_eval, "get_or_prepare_questions", forbidden)
     monkeypatch.setattr(meeting_eval, "evaluate_meeting", forbidden)
-    monkeypatch.setattr(judge, "generate", forbidden)
-    monkeypatch.setattr(judge, "a_generate", forbidden)
+    monkeypatch.setattr(type(judge), "respond", forbidden)
+    monkeypatch.setattr(type(judge), "bind_tools", forbidden)
     export_cell = next(cell for cell in cells if cell["id"] == "meeting-export")
     restarted_namespace = {"results_json": results_json}
     asyncio.run(execute_cells([export_cell], restarted_namespace))

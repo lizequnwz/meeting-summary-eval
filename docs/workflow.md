@@ -4,6 +4,12 @@ Run commands from the repository root after completing the [installation steps](
 New question preparation and summary evaluation make billable model calls. Loading saved
 questions, saving records, and exporting reports do not.
 
+Preparation and evaluation use LangChain chat models with structured output. A CLI model
+name selects `ChatOpenAI`; Python and the notebook can also receive a configured
+`BaseChatModel` instance. Defaults use `OPENAI_MODEL` or `gpt-6-luna`, with a 120-second
+timeout and two retries. Endpoint precedence is `OPENAI_BASE_URL`, `OPENAI_API_BASE`, then
+`https://api.openai.com/v1`. See the [model setup example](implementation.md#configure-a-langchain-model).
+
 ## Evaluate folders
 
 ```bash
@@ -135,11 +141,12 @@ An excluded question did not receive a source `yes` and is outside the coverage
 denominator. An execution error has blank scores; a native zero score is a measured
 result. See [Methodology](methodology.md) for the exact rules and zero-denominator cases.
 
-Available costs are shown separately for evaluation and preparation. Generation cost
-remains historical provenance when a set is reused; it is shown as current generation
-spending only when preparation was performed for that evaluation. Blank cost means
-unavailable, not zero. The reports provide no invented per-question explanations or
-verified transcript passage citations.
+New preparation and evaluation calls leave USD cost fields empty. LangChain's standard
+usage metadata provides token counts rather than currency, and the project does not
+infer prices. Blank cost means unavailable, not zero. Numeric cost observations already
+present in saved data are rendered as recorded; a reused set's generation cost remains
+historical provenance. These fields are not a billing reconciliation. The reports provide
+no invented per-question explanations or verified transcript passage citations.
 
 ## Rebuild reports without reevaluating
 
