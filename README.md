@@ -1,13 +1,16 @@
 # Meeting summary evaluation
 
-Evaluate an existing meeting summary against its transcript with DeepEval's built-in
-`SummarizationMetric`. One metric produces **alignment**, **coverage**, an overall score,
-and inspectable questions, claims, verdicts, and reasoning.
+Evaluate an existing meeting summary against its transcript with DeepEval's native
+`SummarizationMetric`. The evaluator records **alignment**, **coverage**, their minimum,
+and inspectable questions, claims, answers, and verdicts. Coverage questions are generated
+once per meeting and saved for reuse. Excel and HTML reports are rendered from the same
+saved evaluation, without making more model calls.
 
-The [business context](examples/business-context.md) describes the intended readers:
+The [business context](examples/business-context.md) describes the audience and purpose:
 institutional sales professionals preparing advisor and client conversations from weekly
-capital-markets meetings. It is the single place to describe audience and purpose; replace
-it for another use case or omit it for stock DeepEval question generation.
+capital-markets meetings. Replace it for another audience or omit it for stock native
+question generation. The [historical content checklist](docs/fixed-evaluation-questions.md)
+guides selection of important transcript facts; it is not a separately scored rubric.
 
 ## Install
 
@@ -18,96 +21,111 @@ python -m venv .venv
 .venv/bin/python -m pip install -e '.[dev,notebooks]'
 ```
 
-Install with `-e .` if you only need the Python helper and batch command. DeepEval is pinned
-to **4.3.2**. Set `OPENAI_API_KEY` in your environment or a local `.env` in the working
-directory. Optional `OPENAI_MODEL` (default `gpt-6-luna`) and `OPENAI_BASE_URL` select the
-judge and endpoint. Process environment settings override `.env`; an explicit `model`
-overrides `OPENAI_MODEL`. The endpoint must support the selected model and structured output.
+Install with `-e .` if you only need the Python helpers and batch command. DeepEval is
+pinned to **4.3.2**. Set `OPENAI_API_KEY` in your environment or a local `.env` in the
+working directory. Optional `OPENAI_MODEL` (default `gpt-6-luna`) and `OPENAI_BASE_URL`
+select the judge and endpoint. Process environment settings override `.env`; an explicit
+model overrides `OPENAI_MODEL`. The endpoint must support the selected model and structured
+output.
 
-## Evaluate one meeting
+## Evaluate in the notebook
 
-```python
-from pathlib import Path
-from meeting_eval import create_metric
-from deepeval.test_case import LLMTestCase
-
-test_case = LLMTestCase(
-    input=Path("examples/data/transcripts/meeting_001.txt").read_text(),
-    actual_output=Path("examples/data/summaries/meeting_001.md").read_text(),
-)
-metric = create_metric(
-    business_context=Path("examples/business-context.md").read_text(),
-)
-metric.measure(test_case)
-print(metric.score_breakdown["Alignment"], metric.score_breakdown["Coverage"])
-print(metric.score, metric.reason)
-```
-
-`create_metric(model=None, business_context=None, n=5, async_mode=True)` returns the native
-`SummarizationMetric`. It uses score-only mode (`threshold=None`), LLM judging, and reasons.
-The model can be a name or a native DeepEval model instance. In a notebook, use
-`await metric.a_measure(test_case)` instead of `measure()`.
-
-When supplied, business context changes only the native coverage-question prompt through
-`SummarizationTemplate.generate_questions`. It guides which transcript facts matter to
-readers; it never supplies factual evidence or required headings. Alignment and both score
-calculations remain native. **Create a fresh metric for each meeting**: DeepEval retains
-generated questions on the instance.
-
-Open the [single notebook](notebooks/evaluate_meetings.ipynb) for an editable example that
-also displays questions, claims, and verdicts:
+Open the [notebook](notebooks/evaluate_meetings.ipynb):
 
 ```bash
 .venv/bin/jupyter lab notebooks/evaluate_meetings.ipynb
 ```
 
+Its cells load a meeting, prepare or load its frozen questions, let you review the question
+list, evaluate once, and immediately save `results.json`. You can then inspect scores,
+counts, paired claims and alignment verdicts, and question answers. A separate export cell
+reads that JSON to produce `report.xlsx` and `report.html`; it also works after a kernel
+restart by choosing the saved JSON path. Exporting does not reevaluate the summary or
+require the source files.
+
 ## Evaluate folders
 
 ```bash
-.venv/bin/meeting-eval \
+.venv/bin/meeting-eval evaluate \
   --transcripts examples/data/transcripts \
   --summaries examples/data/summaries \
   --business-context examples/business-context.md \
+  --questions results/questions \
   --output results
 ```
 
 Files in flat folders are paired by case-sensitive filename stem; `.txt` and `.md` are
-supported. Meetings run sequentially with a fresh metric each time. Add `--model NAME` or
-`--n 10` to change the judge or number of coverage questions; the default is five questions.
+supported. Meetings run sequentially with a fresh metric each time. Add `--model NAME`
+to choose a judge. New question sets contain five questions by default. `--n 10` requests
+a larger sample when preparing a set; omitting `--n` reuses a saved set's count.
 
-Each run creates a new directory containing `results.json` (native scores and details plus
-run settings), `scores.csv` (one score row per meeting), and a standalone `report.html`
-(score table and expandable details). Missing partners, duplicate stems, blank/unreadable
-files, and judge failures are recorded against their meeting IDs. Successful meetings
-remain available; failed scores stay empty. Execution errors produce a nonzero exit status;
-low quality scores do not.
+The first evaluation of a meeting generates and saves transcript-specific factual
+questions. Later evaluations load those exact questions. A changed transcript, business
+context, or explicitly requested question count requires `--regenerate-questions` to
+replace the saved set. Earlier evaluations retain their complete question set. Business
+context changes topic selection only; it supplies no factual evidence. Frozen questions
+remove variation in question selection, while claim extraction and judging can still vary.
+
+Each evaluation creates a new run directory containing:
+
+- `results.json`: the complete saved evaluation, run settings, question provenance,
+  scores, counts, paired claims, and question answers.
+- `report.xlsx`: an Excel workbook for reviewing scores and detailed verdicts.
+- `report.html`: a standalone report containing the same recorded results.
+
+Missing partners, duplicate stems, blank/unreadable files, and judge failures remain
+associated with their meeting IDs. Successful results are saved as the batch progresses.
+Failed scores stay empty. Execution errors produce a nonzero exit status; low quality
+scores do not.
+
+## Re-export a saved evaluation
+
+```bash
+.venv/bin/meeting-eval report results/<run-directory>/results.json
+```
+
+This creates or replaces `report.xlsx` and `report.html` beside the saved JSON. Add
+`--output PATH` to write the reports elsewhere. It reads the saved evaluation only: no API
+key, transcript, summary, or question-generation call is needed. A report failure leaves
+the JSON available for another export attempt.
+
+The notebook and CLI share the same Python helpers: `get_or_prepare_questions`,
+`evaluate_meeting`, `new_run`, `save_evaluation`, `load_evaluation`, and `export_reports`.
+`create_metric` constructs the native metric from an explicit `assessment_questions`
+list; question generation belongs to the preparation helper. Create a fresh metric for
+each meeting rather than reusing a metric instance.
 
 ## Read the scores
 
 - **Alignment, 0–1:** the fraction of extracted summary claims judged supported by the
-  transcript. Contradictory and unsupported/borderline claims reduce it.
-- **Coverage, 0–1:** the fraction of source-answerable assessment questions also answerable
-  from the summary. This samples information preservation; it is not a percentage of all
-  important information or transcript sentences.
-- **Overall, 0–1:** DeepEval's minimum of alignment and coverage. There is no acceptance gate.
+  transcript. Contradictory and unsupported/borderline claims reduce it. Inspect the
+  supported-claim count and total extracted claims alongside the score.
+- **Coverage, 0–1:** the fraction of source-answerable frozen questions also answerable
+  from the summary. Inspect covered, eligible, and total question counts. This samples
+  information preservation; it is not a percentage of all important information or
+  transcript sentences.
+- **Overall, 0–1:** DeepEval's minimum of alignment and coverage. There is no acceptance
+  gate or additional comparative-rubric score.
 
 Read the reason and verdicts alongside scores. Native alignment may penalize derived
-outreach ideas absent from the transcript, even if labeled as suggestions. No custom
+outreach ideas absent from the transcript, even when labeled as suggestions. No custom
 exception is added. The transcript establishes what was said, not external truth; model
-extraction and judgments can miss errors. Different question samples can change coverage
-between runs. See [DeepEval's scoring documentation](https://deepeval.com/docs/metrics-summarization).
+extraction and judging can miss material errors. See [DeepEval's scoring
+documentation](https://deepeval.com/docs/metrics-summarization).
 
 ## Check the pipeline
 
-Run `.venv/bin/python -m pytest` for offline checks. CI tests native metric integration,
-input failures, exports, and notebook syntax without calling a hosted judge.
+Run `.venv/bin/python -m pytest` for offline checks. CI checks installed dependencies,
+frozen-question reuse, native metric integration, input failures, saved evaluations,
+report exports, and notebook execution without calling a hosted judge.
 
-For an optional live smoke check, run the folder command above and inspect all three
-fictional examples: `meeting_001` preserves the main meaning, `meeting_002` omits central
-information, and `meeting_003` distorts facts. Look for sensible explanations and verdicts
-instead of expecting exact scores. Notebook and CLI evaluations make billable model calls;
-offline tests establish pipeline behavior, not judge accuracy.
+The three fictional examples offer an optional live smoke check: `meeting_001` preserves
+the main meaning, `meeting_002` omits central information, and `meeting_003` distorts
+facts. Inspect explanations and verdicts instead of expecting exact scores. Preparing
+new questions and evaluating summaries make billable model calls; offline tests establish
+pipeline behavior, not judge accuracy. No human-reviewed calibration is included.
 
 DeepEval telemetry is disabled. Transcripts and summaries are sent to the configured judge
-endpoint, and local outputs can contain sensitive source text. Keep credentials and real
-meeting data out of Git; generated reports belong under ignored `results/`.
+endpoint, and saved question sets and evaluations can contain sensitive source text. Keep
+credentials and real meeting data out of Git; generated artifacts belong under ignored
+`results/`.

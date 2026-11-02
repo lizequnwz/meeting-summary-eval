@@ -23,5 +23,5 @@ jobs:
         run: python -m pip install -e '.[dev]'
       - name: Check installed dependencies
         run: python -m pip check
-      - name: Check pipeline, exports, and notebook offline
+      - name: Check questions, exports, and notebook offline
         run: python -m pytest
