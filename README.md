@@ -9,8 +9,14 @@ saved evaluation, without making more model calls.
 The [business context](examples/business-context.md) describes the audience and purpose:
 institutional sales professionals preparing advisor and client conversations from weekly
 capital-markets meetings. Replace it for another audience or omit it for stock native
-question generation. The [historical content checklist](docs/fixed-evaluation-questions.md)
-guides selection of important transcript facts; it is not a separately scored rubric.
+question generation. Contextual question generation prioritizes consequential transcript
+facts; it does not add a separately scored rubric.
+
+## Documentation
+
+The [documentation index](docs/README.md) links to the [approach](docs/approach.md),
+[scoring methodology](docs/methodology.md), [workflow and report guide](docs/workflow.md),
+and [implementation reference](docs/implementation.md).
 
 ## Install
 
