@@ -22,6 +22,11 @@ The [documentation index](docs/README.md) links to the [approach](docs/approach.
 [scoring methodology](docs/methodology.md), [workflow and report guide](docs/workflow.md),
 and [implementation reference](docs/implementation.md).
 
+A separate [summary contradiction metric](docs/contradiction-metric.md) compares summary
+claims with the full transcript, fails on contradictions, and reports unsupported claims
+as warnings. It is callable from Python; the existing CLI, notebook, and saved reports
+continue to use the native evaluation described below.
+
 ## Install
 
 Use Python 3.11 or newer:

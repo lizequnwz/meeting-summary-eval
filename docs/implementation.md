@@ -10,8 +10,9 @@ and judge. See the [README](../README.md) for commands and the
 | Module | Responsibility |
 | --- | --- |
 | [`inputs.py`](../src/meeting_eval/inputs.py) | Normalize text; pair flat `.txt`/`.md` folders by case-sensitive filename stem; retain missing/duplicate-partner errors. |
-| [`judge.py`](../src/meeting_eval/judge.py) | Adapt a LangChain chat model to DeepEval's judge interface; invoke native response schemas through structured output. |
+| [`judge.py`](../src/meeting_eval/judge.py) | Adapt a LangChain chat model to DeepEval's judge interface; invoke Pydantic response schemas through structured output. |
 | [`metrics.py`](../src/meeting_eval/metrics.py) | Resolve the judge, validate explicit questions, construct a fresh native DeepEval metric. |
+| [`contradiction.py`](../src/meeting_eval/contradiction.py) | Independently extract summary claims and judge them against the full transcript; fail contradictions and expose unsupported warnings. |
 | [`questions.py`](../src/meeting_eval/questions.py) | Generate, validate, fingerprint, persist, and reuse transcript-specific questions. |
 | [`evaluation.py`](../src/meeting_eval/evaluation.py) | Evaluate a meeting; pair native verdicts with claims/questions; validate and save canonical run records. |
 | [`storage.py`](../src/meeting_eval/storage.py) | Hash normalized content, sanitize endpoint provenance, normalize reported costs, create run directories, replace JSON files atomically. |
@@ -31,8 +32,9 @@ receive prompts and responses.
 
 `LangChainJudge` is the internal bridge to DeepEval's `DeepEvalBaseLLM` interface. Every
 generation call uses `model.with_structured_output(schema, include_raw=True)` followed by
-`invoke` or `ainvoke`. The schemas are Pydantic models supplied by the native metric or
-question preparation. Injected models must support that structured-output interface.
+`invoke` or `ainvoke`. The schemas are Pydantic models supplied by the native metric,
+question preparation, or standalone contradiction metric. Injected models must support
+that structured-output interface.
 Response parsing failures remain evaluation errors; the adapter preserves native prompts
 and scoring. Question preparation and metric creation each wrap the configured model with
 the same adapter implementation.
@@ -47,6 +49,7 @@ Every `model` parameter accepts a model name, a LangChain `BaseChatModel`, or `N
 | `await get_or_prepare_questions(meeting_id, transcript, *, business_context=None, questions_dir=Path("results/questions"), model=None, n=None, regenerate=False)` | Returns `(question_set, generated)`. `generated` is true only after newly generated questions have been validated and persisted. A matching saved set returns false without resolving a judge. |
 | `await evaluate_meeting(meeting_id, transcript, summary, *, question_set, model=None, transcript_path=None, summary_path=None, question_generation_performed=False)` | Returns a completed/error meeting dictionary. Requires an explicit question snapshot and never generates questions. Pass the preparation flag through for spending provenance. Source paths are optional provenance; the supplied strings are evaluated. |
 | `create_metric(model=None, *, assessment_questions, async_mode=True)` | Returns a fresh native `SummarizationMetric`, with `n=len(assessment_questions)`, `threshold=None`, `eval_mode="llm"`, and reasons enabled. Direct native measurement does not create a canonical saved run. |
+| `SummaryContradictionMetric(model=None, *, async_mode=True)` | Returns a separate custom DeepEval metric. `measure(LLMTestCase(input=transcript, actual_output=summary))` or `await a_measure(...)` records a binary contradiction score, three-way claim verdicts, counts, and rates on the metric instance. Does not create a saved run or change the native pipeline. See [standalone usage](contradiction-metric.md). |
 | `new_run(settings=None)` | Returns an empty `running` run with timestamps and installed package versions merged with supplied settings. |
 | `create_run_directory(output_dir="results")` | Creates a unique writable `run-…` directory and returns its `Path`. |
 | `save_evaluation(run, path)` | Updates `run["updated_at"]`, validates the record, writes JSON atomically, and returns the path. The caller sets run status. |
